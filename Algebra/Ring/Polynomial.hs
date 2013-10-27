@@ -4,8 +4,8 @@
 {-# LANGUAGE PolyKinds, RankNTypes, ScopedTypeVariables, StandaloneDeriving   #-}
 {-# LANGUAGE TypeFamilies, TypeOperators, UndecidableInstances, ViewPatterns  #-}
 {-# OPTIONS_GHC -fno-warn-orphans -fno-warn-type-defaults                    #-}
-module Algebra.Ring.Polynomial
-    ( Polynomial, Monomial, MonomialOrder, EliminationType, EliminationOrder
+module Algebra.Ring.PolynomialAccumulated
+    ( Polynomial, Monomial, degree, MonomialOrder, EliminationType, EliminationOrder
     , WeightedEliminationOrder, eliminationOrder, weightedEliminationOrder
     , lex, revlex, graded, grlex, grevlex, productOrder, productOrder'
     , transformMonomial, WeightProxy(..), weightOrder, totalDegree, totalDegree'
@@ -43,8 +43,15 @@ import           Prelude                 hiding (lex, negate, recip, sum, (*),
                                           (+), (-), (^), (^^))
 import qualified Prelude                 as P
 
--- | N-ary Monomial. IntMap contains degrees for each x_i.
-type Monomial (n :: Nat) = Vector Int n
+-- | N-ary Monomial. contains degrees for each x_i.
+newtype Monomial (n :: Nat) = Monomial { monomial_   :: Vector (Int, Int) n
+                                       } deriving (Show, Eq)
+
+degree :: Monomial n -> Vector Int n
+degree = V.map fst . monomial_
+
+instance NFData (Vector (Int, Int) n) => NFData (Monomial n) where
+  rnf (Monomial xs) = rnf xs `seq` ()
 
 instance (NFData (Monomial n)) => NFData (OrderedMonomial ord n) where
   rnf (OrderedMonomial m) = rnf m `seq` ()
@@ -63,9 +70,19 @@ instance Monomorphicable (Vector Int) where
 
 -- | convert NAry list into Monomial.
 fromList :: SNat n -> [Int] -> Monomial n
-fromList SZ _ = Nil
-fromList (SS n) [] = 0 :- fromList n []
-fromList (SS n) (x : xs) = x :- fromList n xs
+fromList SZ _ = Monomial Nil
+fromList (SS n) [] =
+  case fromList n [] of
+    Monomial lst -> Monomial ((0, 0) :- lst)
+fromList (SS n) (x : xs) =
+  case fromList n xs of
+    Monomial Nil ->  Monomial ((x, x) :- Nil)
+    Monomial lst@((_, len) :- _) -> Monomial ((x, len+x) :- lst)
+
+fromListV :: SNat n -> [Int] -> Vector Int n
+fromListV SZ _ = Nil
+fromListV (SS n) [] = 0 :- fromListV n []
+fromListV (SS n) (x : xs) = x :- fromListV n xs
 
 -- | Monomial order (of degree n). This should satisfy following laws:
 -- (1) Totality: forall a, b (a < b || a == b || b < a)
@@ -74,23 +91,29 @@ fromList (SS n) (x : xs) = x :- fromList n xs
 type MonomialOrder = forall n. Monomial n -> Monomial n -> Ordering
 
 totalDegree :: Monomial n -> Int
-totalDegree = V.foldl (+) 0
-{-# INLINE totalDegree #-}
+totalDegree (Monomial Nil) = 0
+totalDegree (Monomial ((_, n) :- _)) = n
 
 totalDegree' :: OrderedPolynomial k ord n -> Int
 totalDegree' = maximum . (0:) . map (totalDegree . snd) . getTerms
 
 -- | Lexicographical order. This *is* a monomial order.
 lex :: MonomialOrder
-lex Nil Nil = EQ
-lex (x :- xs) (y :- ys) = x `compare` y <> xs `lex` ys
-lex _ _ = bugInGHC
+lex = lex0 `on` monomial_
+
+lex0 :: Vector (Int, Int) n -> Vector (Int, Int) n -> Ordering
+lex0 Nil Nil = EQ
+lex0 ((x, _) :- xs) ((y, _) :- ys) = x `compare` y <> xs `lex0` ys
+lex0 _ _ = bugInGHC
 
 -- | Reversed lexicographical order. This is *not* a monomial order.
 revlex :: Monomial n -> Monomial n -> Ordering
-revlex (x :- xs) (y :- ys) = xs `revlex` ys <> y `compare` x
-revlex Nil       Nil       = EQ
-revlex _ _ = bugInGHC
+revlex = revlex0 `on` monomial_
+
+revlex0 :: Vector (Int, Int) n -> Vector (Int, Int) n -> Ordering
+revlex0 ((x, _) :- xs) ((y, _) :- ys) = xs `revlex0` ys <> y `compare` x
+revlex0 Nil       Nil       = EQ
+revlex0 _ _ = bugInGHC
 
 -- | Convert ordering into graded one.
 graded :: (Monomial n -> Monomial n -> Ordering) -> (Monomial n -> Monomial n -> Ordering)
@@ -111,12 +134,19 @@ grevlex :: MonomialOrder
 grevlex = graded revlex
 {-# INLINE grevlex #-}
 
+withLen :: Vector Int n -> Vector (Int, Int) n
+withLen Nil = Nil
+withLen (n :- ns) =
+  case withLen ns of
+    Nil -> (n, n) :- Nil
+    ns'@((_, acc) :- _) -> (n, n+acc) :- ns'
+
 -- | A wrapper for monomials with a certain (monomial) order.
 newtype OrderedMonomial (ordering :: *) n = OrderedMonomial { getMonomial :: Monomial n }
 deriving instance (Eq (Monomial n)) => Eq (OrderedMonomial ordering n)
 
-instance Wrapped (Monomial n) (Monomial m) (OrderedMonomial o n) (OrderedMonomial o' m) where
-  wrapped = iso OrderedMonomial getMonomial
+instance Wrapped (Vector Int n) (Vector Int m) (OrderedMonomial o n) (OrderedMonomial o' m) where
+  wrapped = iso (OrderedMonomial . Monomial . withLen) (degree.getMonomial)
 
 -- | Class to lookup ordering from its (type-level) name.
 class IsOrder (ordering :: *) where
@@ -156,8 +186,9 @@ productOrder :: forall ord ord' n m. (IsOrder ord, IsOrder ord', SingRep n)
              => Proxy (ProductOrder n ord ord') -> Monomial m -> Monomial m -> Ordering
 productOrder _ m m' =
   case sing :: SNat n of
-    n -> case (V.splitAtMost n m, V.splitAtMost n m') of
-           ((xs, xs'), (ys, ys')) -> cmpMonomial (Proxy :: Proxy ord) xs ys <> cmpMonomial (Proxy :: Proxy ord') xs' ys'
+    n -> case (V.splitAtMost n $ monomial_ m, V.splitAtMost n $ monomial_ m') of
+           ((xs, xs'), (ys, ys')) -> cmpMonomial (Proxy :: Proxy ord) (Monomial xs) (Monomial ys)
+                                       <> cmpMonomial (Proxy :: Proxy ord') (Monomial xs') (Monomial ys')
 
 productOrder' :: forall n ord ord' m.(IsOrder ord, IsOrder ord')
               => SNat n -> ord -> ord' -> Monomial m -> Monomial m -> Ordering
@@ -183,7 +214,7 @@ instance (SingRep n, ToWeightVector ns) => ToWeightVector (n ': ns) where
 
 weightOrder :: forall ns ord m. (ToWeightVector ns, IsOrder ord)
             => Proxy (WeightOrder ns ord) -> Monomial m -> Monomial m -> Ordering
-weightOrder Proxy m m' = comparing (calcOrderWeight (Proxy :: Proxy ns)) m m'
+weightOrder Proxy m m' = comparing (calcOrderWeight (Proxy :: Proxy ns)) (degree m) (degree m')
                          <> cmpMonomial (Proxy :: Proxy ord) m m'
 
 instance (ToWeightVector ws, IsOrder ord) => IsOrder (WeightOrder ws ord) where
@@ -243,12 +274,16 @@ data WeightedEliminationOrder (n :: Nat) (ord :: *) where
     WEOrder :: SNat n -> Proxy ord -> WeightedEliminationOrder n ord
 
 instance (SingRep n, IsMonomialOrder ord) => IsOrder (WeightedEliminationOrder n ord) where
-  cmpMonomial Proxy m m' = comparing (calc (sing :: SNat n)) m m' <> cmpMonomial (Proxy :: Proxy ord) m m'
+  cmpMonomial Proxy m m' = comparing (calc (sing :: SNat n) . monomial_) m m'
+                           <> cmpMonomial (Proxy :: Proxy ord) m m'
     where
-      calc :: SNat l -> Vector Int m -> Int
-      calc (SS _) Nil = 0
-      calc SZ _ = 0
-      calc (SS l) (x :- xs)= x + calc l xs
+      calc :: SNat l -> Vector (Int, Int) m -> Int
+      calc nth Nil = 0
+      calc nth xs@((_, y) :- _) = y - go nth xs
+      go :: SNat l -> Vector (Int, Int) m -> Int
+      go _ Nil = 0
+      go SZ     ((_, x) :- _) = x
+      go (SS l) (_ :- xs)     = go l xs
 
 instance (SingRep n, IsMonomialOrder ord) => IsMonomialOrder (WeightedEliminationOrder n ord)
 
@@ -281,10 +316,10 @@ instance Wrapped (Map (OrderedMonomial order n) r) (Map (OrderedMonomial order' 
     wrapped = iso Polynomial  terms
 
 castMonomial :: (IsOrder o, IsOrder o', SingRep m, n :<= m) => OrderedMonomial o n -> OrderedMonomial o' m
-castMonomial = unwrapped %~ fromList sing . V.toList
+castMonomial = unwrapped %~ fromListV sing . V.toList
 
 scastMonomial :: (n :<= m) => SNat m -> OrderedMonomial o n -> OrderedMonomial o m
-scastMonomial sdim = unwrapped %~ fromList sdim . V.toList
+scastMonomial sdim = unwrapped %~ fromListV sdim . V.toList
 
 castPolynomial :: (IsPolynomial r n, IsPolynomial r m, SingRep m, IsOrder o, IsOrder o', n :<= m)
                => OrderedPolynomial r o n
@@ -295,9 +330,9 @@ scastPolynomial :: (IsOrder o, IsOrder o', IsPolynomial r n, IsPolynomial r m, n
                 => SNat m -> OrderedPolynomial r o n -> OrderedPolynomial r o' m
 scastPolynomial _ = castPolynomial
 
-normalize :: (Eq r, IsOrder order, IsPolynomial r n)
+normalize :: forall r order n. (Eq r, IsOrder order, IsPolynomial r n)
           => OrderedPolynomial r order n -> OrderedPolynomial r order n
-normalize = unwrapped %~ M.insertWith (+) (OrderedMonomial $ {-# SCC "replicate" #-} V.replicate' 0) zero
+normalize = unwrapped %~ M.insertWith (+) (OrderedMonomial $ fromList (sing :: SNat n) []) zero
                        . M.filter (/= zero)
 
 instance (Eq r, IsOrder order, IsPolynomial r n) => Eq (OrderedPolynomial r order n) where
@@ -328,8 +363,10 @@ instance (IsOrder order, IsPolynomial r n) => Unital (OrderedPolynomial r order 
   one = injectCoeff one
 instance (IsOrder order, IsPolynomial r n) => Multiplicative (OrderedPolynomial r order n) where
   Polynomial (M.toList -> d1) *  Polynomial (M.toList -> d2) =
-    let dic = [ (OrderedMonomial $ V.zipWithSame (+) a b, r * r') | (getMonomial -> a, r) <- d1, (getMonomial -> b, r') <- d2 ]
+    let dic = [ (OrderedMonomial $ Monomial $ V.zipWithSame (\(a, b) (c, d) -> (a+c, b+d)) a b, r * r')
+              | (monomial_.getMonomial -> a, r) <- d1, (monomial_.getMonomial -> b, r') <- d2 ]
     in normalize $ Polynomial $ M.fromListWith (+) dic
+
 instance (IsOrder order, IsPolynomial r n) => Semiring (OrderedPolynomial r order n) where
 instance (IsOrder order, IsPolynomial r n) => Commutative (OrderedPolynomial r order n) where
 instance (IsOrder order, IsPolynomial r n) => Abelian (OrderedPolynomial r order n) where
@@ -350,7 +387,7 @@ showPolynomialWithVars dic p0@(Polynomial d)
     | p0 == zero = "0"
     | otherwise = intercalate " + " $ mapMaybe showTerm $ M.toDescList d
     where
-      showTerm (getMonomial -> deg, c)
+      showTerm (degree.getMonomial -> deg, c)
           | c == zero = Nothing
           | otherwise =
               let cstr = if (c == zero - one)
@@ -387,7 +424,7 @@ showPolynomialWith vDic showCoeff p0@(Polynomial d)
       showTerm isLeading (Positive s, deg) = if isLeading then s ++ deg else " + " ++ s ++ deg
       showTerm isLeading (Negative s, deg) = if isLeading then '-' : s ++ deg else " - " ++ s ++ deg
       showTerm isLeading (Eps, deg) = if isLeading then deg else " + " ++ deg
-      procTerm (getMonomial -> deg, c)
+      procTerm (degree.getMonomial -> deg, c)
           | c == zero = Nothing
           | otherwise =
               let cKind = showCoeff c
@@ -449,27 +486,27 @@ leadingCoeff :: (IsOrder order, IsPolynomial r n) => OrderedPolynomial r order n
 leadingCoeff = fst . leadingTerm
 
 divs :: Monomial n -> Monomial n -> Bool
-xs `divs` ys = and $ V.toList $ V.zipWith (<=) xs ys
+xs `divs` ys = and $ V.toList $ V.zipWith (<=) (degree xs) (degree ys)
 
 tryDiv :: Field r => (r, Monomial n) -> (r, Monomial n) -> (r, Monomial n)
 tryDiv (a, f) (b, g)
-    | g `divs` f = (a * recip b, V.zipWithSame (-) f g)
+    | g `divs` f = (a * recip b, Monomial $ V.zipWithSame (\(a,b) (c,d) -> (a-c,b-d)) (monomial_ f) (monomial_ g))
     | otherwise  = error "cannot divide."
 
 lcmMonomial :: Monomial n -> Monomial n -> Monomial n
-lcmMonomial = V.zipWithSame max
+lcmMonomial m n = Monomial $ V.zipWithSame (\(a,b) (c,d) -> (max a b, max c d)) (monomial_ m) (monomial_ n)
 
 subst :: (Module r a, Ring a, Ring r, SingRep n) => Vector a n -> OrderedPolynomial r order n -> a
 subst assign poly = sum $ map (uncurry (.*) . second extractPower) $ getTerms poly
   where
-    extractPower = V.foldr (*) one . V.zipWithSame pow assign . V.map (fromIntegral :: Int -> Natural)
+    extractPower = V.foldr (*) one . V.zipWithSame pow assign . V.map (fromIntegral :: Int -> Natural) . degree
 
 -- | Partially difference at (m+1)-th variable
 diff :: forall n m ord r. (Ring r, SingRep n, IsMonomialOrder ord, SingRep m, (m :<<= n) ~ True)
      => SNat m -> OrderedPolynomial r ord (S n) -> OrderedPolynomial r ord (S n)
 diff mthVar = unwrapped %~ M.mapKeysWith (+) (unwrapped %~ dropDegree)
-                         . M.mapWithKey (\k c -> c * NA.fromIntegral (V.index mthVar (getMonomial k)))
-                         . M.filterWithKey (\k -> const $ V.index mthVar (getMonomial k) > 0)
+                         . M.mapWithKey (\k c -> c * NA.fromIntegral (V.index mthVar (degree $ getMonomial k)))
+                         . M.filterWithKey (\k -> const $ V.index mthVar (degree $ getMonomial k) > 0)
   where
     dropDegree = updateNth mthVar (max 0 . pred)
 
@@ -507,7 +544,7 @@ shiftR :: forall k r n ord. (Field r, IsPolynomial r n, IsPolynomial r (k :+: n)
        => SNat k -> OrderedPolynomial r ord n -> OrderedPolynomial r ord (k :+: n)
 shiftR k =
   case singInstance k of
-    SingInstance -> transformMonomial (V.append (fromList k []))
+    SingInstance -> transformMonomial (Monomial . withLen . V.append (fromListV k []) . degree)
 
 genVars :: forall k o n. (IsPolynomial k (S n), IsOrder o)
         => SNat (S n) -> [OrderedPolynomial k o (S n)]
@@ -517,7 +554,7 @@ genVars sn =
     in map (\m -> Polynomial $ M.singleton (OrderedMonomial $ fromList sn $ take n (drop (n-m) seed)) one) [0..n-1]
 
 sArity :: OrderedPolynomial k ord n -> SNat n
-sArity (Polynomial dic) = V.sLength $ getMonomial $ fst $ M.findMin dic
+sArity (Polynomial dic) = V.sLength $ degree $ getMonomial $ fst $ M.findMin dic
 {-# RULES
 "sArity/zero" forall (v :: OrderedPolynomial k ord Z).                     sArity v = SZ
 "sArity/one" forall (v :: OrderedPolynomial k ord (S Z)).                  sArity v = SS SZ
