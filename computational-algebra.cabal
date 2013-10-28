@@ -21,9 +21,11 @@ source-repository head
 
 library
   exposed-modules:     Algebra.Algorithms.Groebner
+                 ,     Algebra.Algorithms.GroebnerOld
                  ,     Algebra.Algorithms.Groebner.Monomorphic
                  ,     Algebra.Ring.Noetherian
                  ,     Algebra.Ring.Polynomial
+                 ,     Algebra.Ring.PolynomialOld
                  ,     Algebra.Ring.Polynomial.Quotient
                  ,     Algebra.Ring.Polynomial.Monomorphic
                  ,     Algebra.Ring.Polynomial.Parser
@@ -76,7 +78,7 @@ Test-Suite test-multi-table
                ,        transformers
 
 Test-Suite monomial-order-test
-  -- buildable:            False
+  buildable:            False
   type:                 exitcode-stdio-1.0
   main-is:              monomials.hs
   hs-source-dirs:       tests, share
@@ -86,6 +88,33 @@ Test-Suite monomial-order-test
                ,        test-framework          >= 0.8
                ,        test-framework-hunit    >= 0.3
                ,        QuickCheck              >= 2.6
+               ,        HUnit                   >= 1.2
+               ,        hspec                   >= 1.7
+               ,        containers
+               ,        computational-algebra
+               ,        monomorphic
+               ,        smallcheck              >= 1.0
+               ,        hspec-smallcheck        >= 0.1
+               ,        deepseq
+
+Test-Suite new-monomial-test
+  buildable:            True
+  type:                 exitcode-stdio-1.0
+  main-is:              new-monomial.hs
+  hs-source-dirs:       tests, share
+  ghc-options:          -Wall -threaded
+  other-modules:        Instances
+  build-depends:        base
+               ,        test-framework          >= 0.8
+               ,        test-framework-hunit    >= 0.3
+               ,        QuickCheck              >= 2.6
+               ,        quickcheck-instances
+               ,        algebra
+               ,        sized-vector
+               ,        type-natural
+               ,        reflection
+               ,        tagged
+               ,        lens
                ,        HUnit                   >= 1.2
                ,        hspec                   >= 1.7
                ,        containers
@@ -158,6 +187,7 @@ Benchmark quotient-bench-randomized
                ,        process
 
 Benchmark monomial-order-bench
+  buildable:            False
   type:                 exitcode-stdio-1.0
   hs-source-dirs:       bench, share
   ghc-options:          -O2 -threaded -rtsopts

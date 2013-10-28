@@ -49,11 +49,12 @@ import           Data.Vector.Sized                   (Vector (..), sLength,
                                                       toList)
 import qualified Data.Vector.Sized                   as V
 import           Numeric.Algebra
+import           Numeric.Decidable.Zero
 import           Prelude                             hiding (Num (..))
 
 -- | Synonym
-class (Eq r, Field r, NoetherianRing r) => Groebnerable r
-instance (Eq r, Field r, NoetherianRing r) => Groebnerable r
+class (DecidableZero r, DecidableUnits r, Eq r, Field r, NoetherianRing r) => Groebnerable r
+instance (DecidableZero r, DecidableUnits r, Eq r, Field r, NoetherianRing r) => Groebnerable r
 
 -- | Calculate a intersection of given ideals.
 intersection :: forall r. (Groebnerable r)
@@ -265,5 +266,6 @@ resultant f g =
        _ -> error "currently supports only unary polynomial."
 
 -- | Determin if given two unary polynomials have common factor.
-hasCommonFactor :: (Eq r, Division r, NoetherianRing r) => Polynomial r -> Polynomial r -> Bool
-hasCommonFactor f g = resultant f g == zero
+hasCommonFactor :: (Eq r, DecidableUnits r, DecidableZero r, Division r, NoetherianRing r)
+                => Polynomial r -> Polynomial r -> Bool
+hasCommonFactor f g = isZero $ resultant f g

@@ -5,6 +5,7 @@ import           Algebra.Ring.Polynomial.Monomorphic
 import           Control.Applicative                 hiding (many)
 import qualified Data.Map                            as M
 import           Data.Ratio
+import qualified Numeric.Algebra                     as NA
 import           Text.Peggy
 
 [peggy|
@@ -17,8 +18,8 @@ letter :: Char
 variable :: Variable
   = letter ('_' integer)? { Variable $1 (fromInteger <$> $2) }
 
-variableWithPower :: (Variable, Integer)
-  = variable "^" natural { ($1, $2) }
+variableWithPower :: (Variable, NA.Natural)
+  = variable "^" natural { ($1, fromIntegral $2) }
   / variable  { ($1, 1) }
 
 expr :: Polynomial Rational

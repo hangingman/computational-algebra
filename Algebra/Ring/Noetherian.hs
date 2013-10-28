@@ -13,6 +13,8 @@ import           Data.Vector.Sized       (Vector (..))
 import qualified Data.Vector.Sized       as V
 import           Numeric.Algebra
 import qualified Numeric.Algebra.Complex as NA
+import           Numeric.Decidable.Units
+import           Numeric.Decidable.Zero
 import           Prelude                 hiding (negate, subtract, (*), (+),
                                           (-))
 import qualified Prelude                 as P
@@ -32,6 +34,13 @@ instance Integral n => InvolutiveMultiplication (Ratio n) where
 instance Integral n => InvolutiveSemiring (Ratio n)
 
 instance Integral n => TriviallyInvolutive (Ratio n)
+
+instance (Integral n, DecidableZero n) => DecidableZero (Ratio n) where
+  isZero = isZero . numerator
+
+instance (Integral n, DecidableZero n) => DecidableUnits (Ratio n) where
+  recipUnit q | isZero q  = Nothing
+              | otherwise = Just $ P.recip q
 
 instance (P.Num n) => P.Num (NA.Complex n) where
   abs = error "unimplemented"
@@ -99,14 +108,14 @@ instance Ord r => Ord (Ideal r) where
 instance Show r => Show (Ideal r) where
   show = show . generators
 
-addToIdeal :: (Monoidal r, Eq r) => r -> Ideal r -> Ideal r
+addToIdeal :: (Monoidal r, DecidableZero r) => r -> Ideal r -> Ideal r
 addToIdeal i (Ideal is)
-    | i == zero = Ideal is
+    | isZero i  = Ideal is
     | otherwise = Ideal (i :- is)
 
 infixr `addToIdeal`
 
-toIdeal :: (Eq r, NoetherianRing r) => [r] -> Ideal r
+toIdeal :: (DecidableZero r, NoetherianRing r) => [r] -> Ideal r
 toIdeal = foldr addToIdeal (Ideal Nil)
 
 appendIdeal :: Ideal r -> Ideal r -> Ideal r
@@ -115,7 +124,7 @@ appendIdeal (Ideal is) (Ideal js) = Ideal (is `V.append` js)
 generators :: Ideal r -> [r]
 generators (Ideal is) = V.toList is
 
-filterIdeal :: (Eq r, NoetherianRing r) => (r -> Bool) -> Ideal r -> Ideal r
+filterIdeal :: (DecidableZero r, NoetherianRing r) => (r -> Bool) -> Ideal r -> Ideal r
 filterIdeal p (Ideal i) = V.foldr (\h -> if p h then addToIdeal h else id) (toIdeal []) i
 
 principalIdeal :: r -> Ideal r
