@@ -12,7 +12,7 @@ import           Algebra.Ring.Noetherian
 import           Algebra.Ring.Polynomial
 import           Algebra.Scalar
 import           Control.DeepSeq
-import qualified Data.HashMap.Lazy           as M
+import qualified Data.HashMap.Strict         as M
 import           Data.List                   (sortBy)
 import           Data.Maybe
 import           Data.Ord

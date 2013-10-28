@@ -4,27 +4,28 @@
 {-# LANGUAGE StandaloneDeriving, UndecidableInstances                         #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults -fno-warn-orphans #-}
 module Instances (ZeroDimIdeal(..), polyOfDim, arbitraryRational, forAllPolyOfDim
-                 , quotOfDim, isNonTrivial, toOldPoly, fromOldPoly) where
+                 , quotOfDim, oldQuotOfDim, isNonTrivial, toOldPoly, fromOldPoly) where
 import           Algebra.Ring.Noetherian
-import           Algebra.Ring.Polynomial          hiding (Positive)
+import           Algebra.Ring.Polynomial             hiding (Positive)
 import           Algebra.Ring.Polynomial.Quotient
-import qualified Algebra.Ring.PolynomialOld       as OP
+import qualified Algebra.Ring.Polynomial.QuotientOld as OP
+import qualified Algebra.Ring.PolynomialOld          as OP
 import           Control.Applicative
 import           Control.Arrow
 import           Control.Lens
 import           Control.Monad
-import qualified Data.Map                         as M
+import qualified Data.Map                            as M
 import           Data.Proxy
 import           Data.Ratio
-import           Data.Reflection                  hiding (Z)
+import           Data.Reflection                     hiding (Z)
 import           Data.Type.Natural
-import           Data.Vector.Sized                (Vector (..))
-import qualified Numeric.Algebra                  as NA
+import           Data.Vector.Sized                   (Vector (..))
+import qualified Numeric.Algebra                     as NA
 import           Test.QuickCheck
-import qualified Test.QuickCheck                  as QC
-import           Test.QuickCheck.Instances        ()
+import qualified Test.QuickCheck                     as QC
+import           Test.QuickCheck.Instances           ()
 import           Test.SmallCheck.Series
-import qualified Test.SmallCheck.Series           as SC
+import qualified Test.SmallCheck.Series              as SC
 
 newtype ZeroDimIdeal n = ZeroDimIdeal { getIdeal :: Ideal (Polynomial Rational n)
                                       } deriving (Show, Eq, Ord)
@@ -117,12 +118,21 @@ instance (NA.Field r, NA.DecidableUnits r, NA.DecidableZero r, NoetherianRing r,
     => Arbitrary (Quotient r ord n ideal) where
   arbitrary = modIdeal <$> arbitrary
 
+instance (Reifies ideal (OP.QIdeal Rational OP.Grevlex n)
+         , SingRep n)
+    => Arbitrary (OP.Quotient Rational OP.Grevlex n ideal) where
+  arbitrary = OP.modIdeal . toOldPoly <$> arbitrary
+
 polyOfDim :: SingRep n => SNat n -> QC.Gen (Polynomial Rational n)
 polyOfDim _ = arbitrary
 
 quotOfDim :: (SingRep n, Reifies ideal (QIdeal Rational Grevlex n))
           => Proxy ideal -> QC.Gen (Quotient Rational Grevlex n ideal)
 quotOfDim _ = arbitrary
+
+oldQuotOfDim :: (SingRep n, Reifies ideal (OP.QIdeal Rational OP.Grevlex n))
+          => Proxy ideal -> QC.Gen (OP.Quotient Rational OP.Grevlex n ideal)
+oldQuotOfDim _ = arbitrary
 
 genLM :: forall n. SNat n -> QC.Gen [Polynomial Rational n]
 genLM SZ = return []

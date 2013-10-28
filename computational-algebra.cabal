@@ -27,6 +27,7 @@ library
                  ,     Algebra.Ring.Polynomial
                  ,     Algebra.Ring.PolynomialOld
                  ,     Algebra.Ring.Polynomial.Quotient
+                 ,     Algebra.Ring.Polynomial.QuotientOld
                  ,     Algebra.Ring.Polynomial.Monomorphic
                  ,     Algebra.Ring.Polynomial.Parser
                  ,     Algebra.Scalar
@@ -165,6 +166,32 @@ Benchmark quotient-bench-randomized
   hs-source-dirs:       bench, share
   ghc-options:          -O2 -threaded -rtsopts
   main-is:              quotient-bench-randomized.hs
+  other-modules:        SingularBench
+  build-depends:        computational-algebra
+               ,        algebra
+               ,        base
+               ,        singletons
+               ,        deepseq
+               ,        criterion
+               ,        process
+               ,        containers
+               ,        parallel
+               ,        type-natural
+               ,        sized-vector
+               ,        QuickCheck
+               ,        smallcheck
+               ,        quickcheck-instances
+               ,        transformers
+               ,        lens
+               ,        reflection
+               ,        tagged
+               ,        process
+
+Benchmark acc-vs-old-bench
+  type:                 exitcode-stdio-1.0
+  hs-source-dirs:       bench, share
+  ghc-options:          -O2 -threaded -rtsopts
+  main-is:              accum-vs-naive.hs
   other-modules:        SingularBench
   build-depends:        computational-algebra
                ,        algebra
