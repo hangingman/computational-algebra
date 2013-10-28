@@ -73,9 +73,9 @@ stdMonoms basis = do
   let lms = map leadingTerm basis
       dim = sing :: SNat n
       tests = zip (diag 1 0 dim) (diag 0 1 dim)
-      mexp (val, test) = [ V.foldr (+) 0 $ V.zipWith (*) val lm0
+      mexp (val, test) = [ V.foldr (+) 0 $ V.zipWith (*) val (degree lm0)
                          | (c, lm0) <- lms, c /= zero
-                         , let a = V.foldr (+) 0 $ V.zipWith (*) lm0 test, a == 0
+                         , let a = V.foldr (+) 0 $ V.zipWith (*) (degree lm0) test, a == 0
                          ]
   degs <- mapM (minimum' . mexp) tests
   return [ monom | ds0 <- sequence $ map (enumFromTo 0) degs

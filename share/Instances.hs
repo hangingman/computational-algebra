@@ -35,11 +35,14 @@ a %. SC.Positive b = a % b
 instance (Integral a, Ord a, Serial m a) => Serial m (Ratio a) where
   series = cons2 (%.)
 
-instance Monad m => Serial m (Monomial Z) where
+instance Monad m => Serial m (Vector Int Z) where
   series = cons0 Nil
 
-instance (Serial m (Monomial n)) => Serial m (Monomial (S n)) where
+instance (Serial m (Vector Int n)) => Serial m (Vector Int (S n)) where
   series = (:-) <$> (SC.getNonNegative <$> series) <*> series
+
+instance Serial m (Vector Int n) => Serial m (Monomial n) where
+  series = newtypeCons fromVector
 
 instance (Ord k, Serial m k, Serial m v) => Serial m (M.Map k v) where
   series = M.fromList <$> series
@@ -61,15 +64,15 @@ xPoly :: Monad m => SC.Series m (Polynomial Rational Two)
 xPoly = do
   (series SC.>< series) >>- \(c, d) ->
     series >>- \p -> do
-      guard $ OrderedMonomial (leadingMonomial p) < (OrderedMonomial (d :- 0 :- Nil) :: OrderedMonomial Grevlex Two)
-      return $ appendLM c (d :- 0 :- Nil) p
+      guard $ OrderedMonomial (leadingMonomial p) < (OrderedMonomial (fromVector $ d :- 0 :- Nil) :: OrderedMonomial Grevlex Two)
+      return $ appendLM c (fromVector $ d :- 0 :- Nil) p
 
 yPoly :: Monad m => SC.Series m (Polynomial Rational Two)
 yPoly = do
   (series SC.>< series) >>- \(c, d) ->
     series >>- \p -> do
-      guard $ OrderedMonomial (leadingMonomial p) < (OrderedMonomial (d :- 0 :- Nil) :: OrderedMonomial Grevlex Two)
-      return $ appendLM c (0 :- d :- Nil) p
+      guard $ OrderedMonomial (leadingMonomial p) < (OrderedMonomial (fromVector $ d :- 0 :- Nil) :: OrderedMonomial Grevlex Two)
+      return $ appendLM c (fromVector $ 0 :- d :- Nil) p
 
 instance Monad m => Serial m (ZeroDimIdeal Two) where
   series = do
@@ -81,7 +84,7 @@ instance SingRep n => Arbitrary (Monomial n) where
   arbitrary = arbVec
 
 arbVec :: forall n. SingRep n => Gen (Monomial n)
-arbVec = V.unsafeFromList len . map QC.getNonNegative <$> vector (sNatToInt len)
+arbVec = fromList len . map QC.getNonNegative <$> vector (sNatToInt len)
     where
       len = sing :: SNat n
 

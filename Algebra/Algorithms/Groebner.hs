@@ -102,7 +102,7 @@ primeTestBuchberger ideal =
   where
     calc acc = [ q | f <- acc, g <- acc, f /= g
                , let f0 = leadingMonomial f, let g0 = leadingMonomial g
-               , lcmMonomial f0 g0 /= V.zipWithSame (+) f0 g0
+               , degree (lcmMonomial f0 g0) /= V.zipWithSame (+) (degree f0) (degree g0)
                , let q = sPolynomial f g `modPolynomial` acc, q /= zero
                ]
 
@@ -150,12 +150,16 @@ Nil       =@= (0 :- ys) = Nil =@= ys
 _         =@= _         = False
 
 instance Eq (Monomorphic (OrderedMonomial ord)) where
-  Monomorphic xs == Monomorphic ys = getMonomial xs =@= getMonomial ys
+  Monomorphic xs == Monomorphic ys = degree (getMonomial xs) =@= degree (getMonomial ys)
 
 instance IsMonomialOrder ord => Ord (Monomorphic (OrderedMonomial ord)) where
   compare (Monomorphic (OrderedMonomial m)) (Monomorphic (OrderedMonomial m')) =
-      let (mm, mm') = padVec 0 m m'
-      in cmpMonomial (Proxy :: Proxy ord) mm mm'
+      let (mLen, mLen') = (sLength $ degree m, sLength $ degree m')
+          len = sMax mLen mLen'
+      in case propToBoolLeq (maxLeqL mLen mLen') of
+           LeqTrueInstance ->
+               case propToBoolLeq (maxLeqR mLen mLen') of
+                 LeqTrueInstance -> cmpMonomial (Proxy :: Proxy ord ) (extendRMonom len m) (extendRMonom len m')
 
 -- | apply buchberger's algorithm using given selection strategy.
 syzygyBuchbergerWithStrategy :: ( Field r, IsPolynomial r n, IsMonomialOrder order, SelectionStrategy strategy
@@ -177,7 +181,7 @@ syzygyBuchbergerWithStrategy strategy ideal = runST $ do
                                   && (all (\k -> H.all ((/=k) . H.payload) rest)
                                                      [(f, h), (g, h), (h, f), (h, g)])
                                   && leadingMonomial h `divs` l) gs0
-    when (l /= V.zipWithSame (+) f0 g0 && not redundant) $ do
+    when (l /= f0 * g0 && not redundant) $ do
       len0 <- readSTRef len
       let qs = (H.toList gs0)
           s = sPolynomial f g `modPolynomial` map H.payload qs
@@ -315,9 +319,9 @@ thEliminationIdealWith :: ( IsMonomialOrder ord, Field k, IsPolynomial k m, IsPo
                    -> Ideal (OrderedPolynomial k ord (m :-: n))
 thEliminationIdealWith ord n ideal =
     case singInstance n of
-      SingInstance ->  toIdeal $ [ transformMonomial (V.drop n) f
+      SingInstance ->  toIdeal $ [ transformMonomial (trimLMonom n) f
                                  | f <- calcGroebnerBasisWith ord ideal
-                                 , all (all (== 0) . take (sNatToInt n) . toList . snd) $ getTerms f
+                                 , all (all (== 0) . take (sNatToInt n) . toList . degree . snd) $ getTerms f
                                  ]
 
 -- | Calculate n-th elimination ideal using the specified n-th elimination type order.
@@ -331,9 +335,9 @@ unsafeThEliminationIdealWith :: ( IsMonomialOrder ord, Field k, IsPolynomial k m
                              -> Ideal (OrderedPolynomial k ord (m :-: n))
 unsafeThEliminationIdealWith ord n ideal =
     case singInstance n of
-      SingInstance ->  toIdeal $ [ transformMonomial (V.drop n) f
+      SingInstance ->  toIdeal $ [ transformMonomial (trimLMonom n) f
                                  | f <- calcGroebnerBasisWith ord ideal
-                                 , all (all (== 0) . take (sNatToInt n) . toList . snd) $ getTerms f
+                                 , all (all (== 0) . take (sNatToInt n) . toList . degree . snd) $ getTerms f
                                  ]
 
 -- | An intersection ideal of given ideals (using 'WeightedEliminationOrder').
