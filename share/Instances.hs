@@ -1,10 +1,11 @@
 {-# LANGUAGE ConstraintKinds, DataKinds, DeriveGeneric, FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances, GADTs, GeneralizedNewtypeDeriving             #-}
 {-# LANGUAGE MultiParamTypeClasses, OverlappingInstances, ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving, UndecidableInstances                         #-}
+{-# LANGUAGE TypeFamilies, UndecidableInstances                               #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults -fno-warn-orphans #-}
-module Instances (ZeroDimIdeal(..), polyOfDim, arbitraryRational, forAllPolyOfDim
-                 , quotOfDim, oldQuotOfDim, isNonTrivial, toOldPoly, fromOldPoly) where
+module Instances (ZeroDimIdeal(..), polyOfDim, arbitraryRational, forAllPolyOfDim, TestIdeal (..)
+                 , quotOfDim, oldQuotOfDim, isNonTrivial, toOldPoly, fromOldPoly
+                 , TestPolynomial(..), ToOld(..)) where
 import           Algebra.Ring.Noetherian
 import           Algebra.Ring.Polynomial             hiding (Positive)
 import           Algebra.Ring.Polynomial.Quotient
@@ -26,6 +27,39 @@ import qualified Test.QuickCheck                     as QC
 import           Test.QuickCheck.Instances           ()
 import           Test.SmallCheck.Series
 import qualified Test.SmallCheck.Series              as SC
+
+data TestPolynomial ord n = TestPolynomial { newPoly :: !(OrderedPolynomial Rational ord n)
+                                           , oldPoly :: !(OP.OrderedPolynomial Rational (ToOld ord) n)
+                                           }
+
+data TestIdeal r = TestIdeal { newIdeal :: !(Ideal r)
+                             , oldIdeal :: !(Ideal (Old r))
+                             }
+
+class ToOld a where
+  type Old ord
+  toOld :: a -> Old a
+
+instance ToOld Lex where
+  type Old Lex = OP.Lex
+  toOld Lex = OP.Lex
+
+instance ToOld Grlex where
+  type Old Grlex   = OP.Grlex
+  toOld Grlex = OP.Grlex
+
+instance ToOld Grevlex where
+  type Old Grevlex = OP.Grevlex
+  toOld Grevlex = OP.Grevlex
+
+instance ToOld a => ToOld (Ideal a) where
+  type Old (Ideal r) = Ideal (Old r)
+  toOld = mapIdeal toOld
+
+instance (SingRep n, IsOrder ord, ToOld ord, OP.IsOrder (Old ord))
+    => ToOld (OrderedPolynomial Rational ord n) where
+  type Old (OrderedPolynomial Rational ord n) = OP.OrderedPolynomial Rational (Old ord) n
+  toOld = OP.changeOrderProxy Proxy . toOldPoly . changeOrderProxy Proxy
 
 newtype ZeroDimIdeal n = ZeroDimIdeal { getIdeal :: Ideal (Polynomial Rational n)
                                       } deriving (Show, Eq, Ord)
@@ -118,10 +152,9 @@ instance (NA.Field r, NA.DecidableUnits r, NA.DecidableZero r, NoetherianRing r,
     => Arbitrary (Quotient r ord n ideal) where
   arbitrary = modIdeal <$> arbitrary
 
-instance (Reifies ideal (OP.QIdeal Rational OP.Grevlex n)
-         , SingRep n)
-    => Arbitrary (OP.Quotient Rational OP.Grevlex n ideal) where
-  arbitrary = OP.modIdeal . toOldPoly <$> arbitrary
+instance (Reifies ideal (OP.QIdeal Rational ord' n), SingRep n, OP.IsMonomialOrder ord')
+    => Arbitrary (OP.Quotient Rational ord' n ideal) where
+  arbitrary = OP.modIdeal . OP.changeOrderProxy Proxy . toOldPoly <$> arbitrary
 
 polyOfDim :: SingRep n => SNat n -> QC.Gen (Polynomial Rational n)
 polyOfDim _ = arbitrary
@@ -160,9 +193,11 @@ arbitraryRational = do
 isNonTrivial :: SingRep n => ZeroDimIdeal n -> Bool
 isNonTrivial (ZeroDimIdeal ideal) = reifyQuotient ideal $ maybe False ((>0).length) . standardMonomials'
 
-toOldPoly :: SingRep n => Polynomial Rational n -> OP.Polynomial Rational n
+toOldPoly :: (SingRep n)
+          => Polynomial Rational n -> OP.Polynomial Rational n
 toOldPoly poly = OP.polynomial $ M.fromListWith (+) $ map ((OP.OrderedMonomial . degree . snd) &&& fst) $ getTerms poly
 
-fromOldPoly :: SingRep n => OP.Polynomial Rational n -> Polynomial Rational n
+fromOldPoly :: (ToOld ord, IsOrder ord, SingRep n)
+            => OP.OrderedPolynomial Rational (Old ord) n -> OrderedPolynomial Rational ord n
 fromOldPoly opoly = polynomial $ M.fromListWith (+) $
                     map ((OrderedMonomial . fromVector . snd ) &&& fst) $ OP.getTerms opoly

@@ -8,10 +8,13 @@ import           Algebra.Ring.Noetherian
 import qualified Algebra.Ring.Polynomial        as P
 import qualified Algebra.Ring.PolynomialOld     as OP
 import           Control.DeepSeq
+import           Control.Lens
 import           Control.Parallel.Strategies
-import           Criterion.Main
+import           Criterion
 import           Data.Type.Natural
 import           Instances
+import           Progression.Main
+import           System.Environment
 
 type Polyn = P.Polynomial Rational Eight
 
@@ -27,72 +30,52 @@ i4 = toIdeal [ z^5 + y^4 + x^3 - 1, z^3 + y^3 + x^2 - 1]
 
 main :: IO ()
 main = do
-  ideal1 <- return $! (i1 `using` rdeepseq)
-  ideal1' <- return $! ((mapIdeal toOldPoly ideal1) `using` rdeepseq)
-  idealLex1 <- return $! (mapIdeal (P.changeOrder P.Lex) i1 `using` rdeepseq)
-  idealLex1' <- return $! ((mapIdeal (OP.changeOrder OP.Lex . toOldPoly) i1) `using` rdeepseq)
-  idealGrlex1 <- return $! (mapIdeal (P.changeOrder P.Grlex) i1 `using` rdeepseq)
-  idealGrlex1' <- return $! (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i1 `using` rdeepseq)
-  ideal2 <- return $! (i2 `using` rdeepseq)
-  ideal2' <- return $! ((mapIdeal toOldPoly ideal2) `using` rdeepseq)
-  idealGrlex2 <- return $! (mapIdeal (P.changeOrder P.Grlex) i2 `using` rdeepseq)
-  idealGrlex2' <- return $! (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i2 `using` rdeepseq)
-  ideal3 <- return $! (i3 `using` rdeepseq)
-  ideal3' <- return $! ((mapIdeal toOldPoly ideal3) `using` rdeepseq)
-  idealLex3 <- return $! (mapIdeal (P.changeOrder P.Lex) i3 `using` rdeepseq)
-  idealLex3' <- return $! ((mapIdeal (OP.changeOrder OP.Lex . toOldPoly) ideal3) `using` rdeepseq)
-  idealGrlex3 <- return $! (mapIdeal (P.changeOrder P.Grlex) i3 `using` rdeepseq)
-  idealGrlex3' <- return $! (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i3 `using` rdeepseq)
-  ideal4 <- return $! (i4 `using` rdeepseq)
-  ideal4' <- return $! ((mapIdeal toOldPoly ideal4) `using` rdeepseq)
-  idealGrlex4 <- return $! (mapIdeal (P.changeOrder P.Grlex) i4 `using` rdeepseq)
-  idealGrlex4' <- return $! (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i4 `using` rdeepseq)
-  defaultMain $ [bgroup "case01"
-                            [ bgroup "lex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Lex) idealLex1'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Lex) idealLex1
+  ideal1 <- return $! TestIdeal (i1 `using` rdeepseq) (mapIdeal toOldPoly i1 `using` rdeepseq)
+  idealLex1 <- return $! TestIdeal (mapIdeal (P.changeOrder P.Lex) i1 `using` rdeepseq)
+                           ((mapIdeal (OP.changeOrder OP.Lex . toOldPoly) i1) `using` rdeepseq)
+  idealGrlex1 <- return $! TestIdeal (mapIdeal (P.changeOrder P.Grlex) i1 `using` rdeepseq)
+                            (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i1 `using` rdeepseq)
+  ideal2 <- return $! TestIdeal (i2 `using` rdeepseq)
+                       ((mapIdeal toOldPoly i2) `using` rdeepseq)
+  idealGrlex2 <- return $! TestIdeal (mapIdeal (P.changeOrder P.Grlex) i2 `using` rdeepseq)
+                            (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i2 `using` rdeepseq)
+  ideal3 <- return $! TestIdeal (i3 `using` rdeepseq)
+                       ((mapIdeal toOldPoly i3) `using` rdeepseq)
+  idealLex3 <- return $! TestIdeal (mapIdeal (P.changeOrder P.Lex) i3 `using` rdeepseq)
+                          ((mapIdeal (OP.changeOrder OP.Lex . toOldPoly) i3) `using` rdeepseq)
+  idealGrlex3 <- return $! TestIdeal (mapIdeal (P.changeOrder P.Grlex) i3 `using` rdeepseq)
+                            (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i3 `using` rdeepseq)
+  ideal4 <- return $! TestIdeal (i4 `using` rdeepseq)
+                       ((mapIdeal toOldPoly i4) `using` rdeepseq)
+  idealGrlex4 <- return $! TestIdeal (mapIdeal (P.changeOrder P.Grlex) i4 `using` rdeepseq)
+                            (mapIdeal (OP.changeOrder OP.Grlex . toOldPoly) i4 `using` rdeepseq)
+  args <- getArgs
+  let toBench :: (P.IsMonomialOrder ord, ToOld ord, OP.IsMonomialOrder (Old ord))
+              => String -> TestIdeal (P.OrderedPolynomial Rational ord Eight) -> Benchmark
+      toBench name =
+          case args of
+            "old":_ -> bench name . nf OP.calcGroebnerBasis . oldIdeal
+            "acc":_ -> bench name . nf P.calcGroebnerBasis . newIdeal
+            _ -> error "kanasimi"
+  withArgs (args &_head %~ ("-n"++)) $ do
+         defaultMain $ bgroup "calcGroebner"
+                  [bgroup "case01"
+                              [ toBench "lex" idealLex1
+                              , toBench "grlex" idealGrlex1
+                              , toBench "grevlex" ideal1
                               ]
-                            , bgroup "grlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grlex) idealGrlex1'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grlex) idealGrlex1
-                              ]
-                            , bgroup "grevlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grevlex) ideal1'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grevlex) ideal1
-                              ]
-                            ]
-                , bgroup "case02"
-                            [ bgroup "grlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grlex) idealGrlex2'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grlex) idealGrlex2
-                              ]
-                            , bgroup "grevlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grevlex) ideal2'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grevlex) ideal2
-                              ]
-                            ]
-               , bgroup "case03"
-                            [ bgroup "lex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Lex) idealLex3'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Lex) idealLex3
-                              ]
-                            , bgroup "grlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grlex) idealGrlex3'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grlex) idealGrlex3
-                              ]
-                            , bgroup "grevlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grevlex) ideal3'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grevlex) ideal3
-                              ]
-                            ]
-                , bgroup "case04"
-                            [ bgroup "grlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grlex) idealGrlex4'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grlex) idealGrlex4
-                              ]
-                            , bgroup "grevlex"
-                              [ bench "old" $ nf (OP.calcGroebnerBasisWith OP.Grevlex) ideal4'
-                              , bench "acc" $ nf (P.calcGroebnerBasisWith P.Grevlex) ideal4
-                              ]
-                            ]
-                ]
+                  , bgroup "case02"
+                               [ toBench "grlex" idealGrlex2
+                               , toBench "grevlex" ideal2
+                               ]
+                  , bgroup "case03"
+                               [ toBench "lex" idealLex3
+                               , toBench "grlex" idealGrlex3
+                               , toBench "grevlex" ideal3
+                               ]
+                  , bgroup "case04"
+                               [ toBench "grlex" idealGrlex4
+                               , toBench "grevlex" ideal4
+                               ]
+                  ]
+

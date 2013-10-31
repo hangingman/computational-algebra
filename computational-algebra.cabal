@@ -27,6 +27,7 @@ library
                  ,     Algebra.Ring.Polynomial
                  ,     Algebra.Ring.PolynomialOld
                  ,     Algebra.Ring.Polynomial.Quotient
+                 ,     Algebra.Ring.Polynomial.QuotientLazy
                  ,     Algebra.Ring.Polynomial.QuotientOld
                  ,     Algebra.Ring.Polynomial.Monomorphic
                  ,     Algebra.Ring.Polynomial.Parser
@@ -160,6 +161,7 @@ Benchmark elimination-bench
                ,        containers
                ,        parallel
                ,        type-natural
+               ,        progression
 
 Benchmark quotient-bench-randomized
   type:                 exitcode-stdio-1.0
@@ -177,6 +179,7 @@ Benchmark quotient-bench-randomized
                ,        containers
                ,        parallel
                ,        type-natural
+               ,        progression
                ,        sized-vector
                ,        QuickCheck
                ,        smallcheck
@@ -212,6 +215,7 @@ Benchmark acc-vs-old-bench
                ,        reflection
                ,        tagged
                ,        process
+               ,        progression
 
 Benchmark monomial-order-bench
   buildable:            False
@@ -242,3 +246,4 @@ Benchmark monomial-order-bench
                ,        monomorphic
                ,        random
                ,        deepseq
+               ,        progression

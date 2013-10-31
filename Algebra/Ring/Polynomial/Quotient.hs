@@ -29,13 +29,13 @@ import           Prelude                     hiding (lex, negate, recip, sum,
 import qualified Prelude                     as P
 
 -- | The polynomial modulo the ideal indexed at the last type-parameter.
-data Quotient r ord n ideal = Quotient { quotRepr_ :: OrderedPolynomial r ord n } deriving (Eq)
+newtype Quotient r ord n ideal = Quotient { quotRepr_ :: OrderedPolynomial r ord n } deriving (Eq)
 
 data QIdeal r ord n = ZeroDimIdeal { gBasis    :: ![OrderedPolynomial r ord n]
                                    , vBasis    :: [Monomial n]
                                    , multTable :: Table r ord n
                                    }
-                    | QIdeal { gBasis :: [OrderedPolynomial r ord n]
+                    | QIdeal { gBasis :: ![OrderedPolynomial r ord n]
                              }
 
 instance NFData (OrderedPolynomial r ord n) => NFData (Quotient r ord n ideal) where
@@ -55,9 +55,9 @@ multWithTable :: (Reifies ideal (QIdeal r ord n), IsMonomialOrder ord, IsPolynom
 multWithTable f g =
   let qid = reflect f
       table = multTable qid
-      basis = vBasis qid
   in sum [ Quotient $ coeff l (quotRepr f) .*. coeff r (quotRepr g) .*. (M.lookupDefault zero (l, r) table)
-         | l <- basis, r <- basis ]
+         | l <- map snd $ getTerms $ quotRepr_ f, r <- map snd $ getTerms $ quotRepr_ g
+         ]
 
 instance Show (OrderedPolynomial r ord n) => Show (Quotient r ord n ideal) where
   show (Quotient f) = show f
@@ -128,23 +128,23 @@ modIdeal' :: (IsMonomialOrder ord, Reifies ideal (QIdeal r ord n), IsPolynomial 
           => Proxy ideal -> OrderedPolynomial r ord n -> Quotient r ord n ideal
 modIdeal' pxy f = Quotient $ f `modPolynomial` gBasis (reflect pxy)
 
-buildQIdeal :: (Eq r, IsMonomialOrder ord, IsPolynomial r n, Field r)
+buildQIdeal :: (Eq r, IsMonomialOrder ord, IsPolynomial r n, Field r, NFData r)
             => Ideal (OrderedPolynomial r ord n) -> QIdeal r ord n
 buildQIdeal ideal =
-    let bs = sortBy (comparing leadingOrderedMonomial) $! calcGroebnerBasis ideal
+    let bs = sortBy (comparing leadingOrderedMonomial) $ calcGroebnerBasis ideal
     in case stdMonoms bs of
          Nothing -> QIdeal bs
          Just ms -> ZeroDimIdeal bs ms (buildMultTable bs ms)
 
 -- | Reifies the ideal at the type-level. The ideal can be recovered with 'reflect'.
-reifyQuotient :: (Eq r, Field r, IsPolynomial r n, IsMonomialOrder ord)
+reifyQuotient :: (NFData r, Eq r, Field r, IsPolynomial r n, IsMonomialOrder ord)
               => Ideal (OrderedPolynomial r ord n)
               -> (forall ideal. Reifies ideal (QIdeal r ord n) => Proxy ideal -> a)
               -> a
 reifyQuotient ideal = reify (buildQIdeal ideal)
 
 -- | Computes polynomial modulo ideal.
-withQuotient :: (Eq r, Field r, IsPolynomial r n, IsMonomialOrder ord)
+withQuotient :: (NFData r, Eq r, Field r, IsPolynomial r n, IsMonomialOrder ord)
              => Ideal (OrderedPolynomial r ord n)
              -> (forall ideal. Reifies ideal (QIdeal r ord n) => Quotient r ord n ideal)
              -> OrderedPolynomial r ord n
@@ -195,7 +195,7 @@ instance (IsMonomialOrder ord, Num r, Reifies ideal (QIdeal r ord n), IsPolynomi
   negate = Quotient . negate . quotRepr_
 
 -- | Reduce polynomial modulo ideal.
-reduce :: (Eq r, Division r, IsPolynomial r n, IsMonomialOrder ord)
+reduce :: (NFData r, Eq r, Division r, IsPolynomial r n, IsMonomialOrder ord)
        => OrderedPolynomial r ord n -> Ideal (OrderedPolynomial r ord n) -> OrderedPolynomial r ord n
 reduce f i = withQuotient i $ modIdeal f
 

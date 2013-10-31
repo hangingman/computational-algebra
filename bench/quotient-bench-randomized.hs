@@ -6,19 +6,20 @@ module Main where
 import           Algebra.Ring.Noetherian
 import           Algebra.Ring.Polynomial
 import           Algebra.Ring.Polynomial.Quotient
-import qualified Algebra.Ring.Polynomial.QuotientOld as OQ
+import qualified Algebra.Ring.Polynomial.QuotientLazy as LQ
+import qualified Algebra.Ring.Polynomial.QuotientOld  as OQ
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Parallel.Strategies
 import           Criterion.Main
-import           Data.List                           (foldl')
+import           Data.List                            (foldl')
 import           Data.Maybe
-import           Data.Type.Natural                   hiding (one)
+import           Data.Type.Natural                    hiding (one)
 import           Instances
-import           Numeric.Algebra                     hiding ((>), (^))
-import           Prelude                             hiding (product)
+import           Numeric.Algebra                      hiding ((>), (^))
+import           Prelude                              hiding (product)
 import           System.Process
 import           Test.QuickCheck
 
@@ -28,20 +29,22 @@ makeIdeals count _ dpI = take count . map getIdeal <$> sample' (resize dpI arbit
 mkTestCases :: SingRep n => Int -> Int -> [Ideal (Polynomial Rational n)] -> IO [Benchmark]
 mkTestCases count size is =
   forM (zip [1..] is) $ \(n, ideal) -> do
-    (dim, bs) <- reifyQuotient ideal $ \ii -> do
+    (fs0, dim, bs) <- reifyQuotient ideal $ \ii -> do
             let dim = maybe 0 length $ standardMonomials' ii
             fs0 <- take count <$> sample' (resize size $ quotOfDim ii)
             putStrLn $ concat [ "\t subcase ", show n, " has dimension "
                               , show dim]
             fs <- return $! (fs0 `using` rdeepseq)
-            return $ (dim, [ bench "accumulate" $ nf product fs
+            return $ (map quotRepr fs, dim, [ bench "accumulate" $ nf product fs
                            , bench "acctable" $ nf (foldl' multWithTable one) fs
                            ])
-    ib <- OQ.reifyQuotient (mapIdeal toOldPoly ideal) $ \ii -> do
-            fs0 <- take count <$> sample' (resize size $ oldQuotOfDim ii)
-            fs <- return $! (fs0 `using` rdeepseq)
-            return $ [ bench "old" $ nf product fs, bench "oldtable" $ nf (foldl' OQ.multWithTable one) fs]
-    return $ bgroup (concat ["case-",show n, "-", show dim, "dim"]) $ ib ++ bs
+    let ib = OQ.reifyQuotient (mapIdeal toOldPoly ideal) $ \ii ->
+               let fs = map (OQ.modIdeal' ii . toOldPoly) fs0 `using` rdeepseq
+               in [ bench "old" $ nf product fs, bench "oldtable" $ nf (foldl' OQ.multWithTable one) fs]
+        jb = LQ.reifyQuotient ideal $ \ii ->
+               let fs = map (LQ.modIdeal' ii) fs0 `using` rdeepseq
+               in [ bench "newlazy" $ nf (foldl' LQ.multWithTable one) fs]
+    return $ bgroup (concat ["case-",show n, "-", show dim, "dim"]) $ ib ++ bs ++ jb
 
 main :: IO ()
 main = do
