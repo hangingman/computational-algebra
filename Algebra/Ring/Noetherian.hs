@@ -9,8 +9,6 @@ import qualified Data.Complex            as C
 import           Data.Function
 import           Data.Ord
 import           Data.Ratio
-import           Data.Vector.Sized       (Vector (..))
-import qualified Data.Vector.Sized       as V
 import           Numeric.Algebra
 import qualified Numeric.Algebra.Complex as NA
 import           Prelude                 hiding (negate, subtract, (*), (+),
@@ -88,7 +86,12 @@ instance Integral n => LeftModule (Ratio n) (Ratio n) where
 instance Integral n => RightModule (Ratio n) (Ratio n) where
     (*.) = (*)
 
-data Ideal r = forall n. Ideal (V.Vector r n)
+data Ideal r = Ideal [r]
+             | StandardBasis [r]
+
+generators :: Ideal r -> [r]
+generators (Ideal gs) = gs
+generators (StandardBasis gs) = gs
 
 instance Eq r => Eq (Ideal r) where
   (==) = (==) `on` generators
@@ -100,29 +103,27 @@ instance Show r => Show (Ideal r) where
   show = show . generators
 
 addToIdeal :: (Monoidal r, Eq r) => r -> Ideal r -> Ideal r
-addToIdeal i (Ideal is)
-    | i == zero = Ideal is
-    | otherwise = Ideal (i :- is)
+addToIdeal i is
+    | i == zero = is
+    | otherwise = Ideal (i : generators is)
 
 infixr `addToIdeal`
 
 toIdeal :: (Eq r, NoetherianRing r) => [r] -> Ideal r
-toIdeal = foldr addToIdeal (Ideal Nil)
+toIdeal = Ideal
 
 appendIdeal :: Ideal r -> Ideal r -> Ideal r
-appendIdeal (Ideal is) (Ideal js) = Ideal (is `V.append` js)
-
-generators :: Ideal r -> [r]
-generators (Ideal is) = V.toList is
+appendIdeal is js = Ideal $ generators is ++ generators js
 
 filterIdeal :: (Eq r, NoetherianRing r) => (r -> Bool) -> Ideal r -> Ideal r
-filterIdeal p (Ideal i) = V.foldr (\h -> if p h then addToIdeal h else id) (toIdeal []) i
+filterIdeal p is = Ideal $ filter p $ generators is
 
 principalIdeal :: r -> Ideal r
-principalIdeal = Ideal . V.singleton
+principalIdeal = StandardBasis . (:[])
 
 mapIdeal :: (r -> r') -> Ideal r -> Ideal r'
-mapIdeal fun (Ideal xs) = Ideal $ V.map fun xs
+mapIdeal fun xs = Ideal $ map fun $ generators xs
 
 instance NFData r => NFData (Ideal r) where
-  rnf (Ideal is) = rnf is
+  rnf (Ideal is)         = rnf is
+  rnf (StandardBasis is) = rnf is

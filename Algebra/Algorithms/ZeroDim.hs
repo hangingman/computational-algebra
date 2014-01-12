@@ -182,7 +182,7 @@ reduction :: (IsPolynomial r n, IsMonomialOrder ord, Field r)
              => OrderedPolynomial r ord (S n) -> OrderedPolynomial r ord (S n)
 reduction f =
   let df = diff 0 f
-  in snd $ head $ f `divPolynomial` calcGroebnerBasis (toIdeal [f, df])
+  in snd $ head $ f `divPolynomial` generators (calcGroebnerBasis $ toIdeal [f, df])
 
 -- | Calculate the monic generator of k[X_0, ..., X_n] `intersect` k[X_i].
 univPoly :: forall r ord n. (Ord r, Field r, IsPolynomial r n, IsMonomialOrder ord)
@@ -245,7 +245,7 @@ radical :: forall r ord n . (Ord r, IsPolynomial r n, Field r, IsMonomialOrder o
         => Ideal (OrderedPolynomial r ord (S n)) -> Ideal (OrderedPolynomial r ord (S n))
 radical ideal =
   let gens  = map (reduction . flip univPoly ideal) $ enumOrdinal (sing :: SNat (S n))
-  in toIdeal $ calcGroebnerBasis $ toIdeal $ generators ideal ++ gens
+  in calcGroebnerBasis $ toIdeal $ generators ideal ++ gens
 
 -- | Test if the given zero-dimensional ideal is radical or not.
 isRadical :: forall r ord n. (Ord r, IsPolynomial r n, Field r, IsMonomialOrder ord)
@@ -253,16 +253,3 @@ isRadical :: forall r ord n. (Ord r, IsPolynomial r n, Field r, IsMonomialOrder 
 isRadical ideal =
   let gens  = map (reduction . flip univPoly ideal) $ enumOrdinal (sing :: SNat (S n))
   in all (`isIdealMember` ideal) gens
-
-testMat :: M.Matrix Rational
-testMat = M.fromLists [[1,0,0]
-                      ,[0,0,0]
-                      ,[0,0,0]
-                      ,[0,0,0]
-                      ,[0,1,0]
-                      ,[0,0,0]
-                      ,[0,0,0]
-                      ,[0,0,0]
-                      ,[0,0,1]
-                      ]
-

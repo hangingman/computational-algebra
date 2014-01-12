@@ -134,7 +134,7 @@ modIdeal' pxy f = Quotient $ f `modPolynomial` gBasis (reflect pxy)
 buildQIdeal :: (IsMonomialOrder ord, IsPolynomial r n, Field r)
             => Ideal (OrderedPolynomial r ord n) -> QIdeal r ord n
 buildQIdeal ideal =
-    let bs = sortBy (comparing leadingOrderedMonomial) $! calcGroebnerBasis ideal
+    let bs = sortBy (comparing leadingOrderedMonomial) $! generators $ calcGroebnerBasis ideal
     in case stdMonoms bs of
          Nothing -> QIdeal bs
          Just ms -> ZeroDimIdeal bs ms (buildMultTable bs ms)
@@ -203,4 +203,4 @@ reduce :: (Eq r, Division r, SingRep n, NoetherianRing r, IsMonomialOrder ord)
 reduce f i = withQuotient i $ modIdeal f
 
 isZeroDimensional :: (Eq r, Division r, SingRep n, NoetherianRing r, IsMonomialOrder ord) => [OrderedPolynomial r ord n] -> Bool
-isZeroDimensional ii = isJust $ stdMonoms $ calcGroebnerBasis $ toIdeal ii
+isZeroDimensional ii = isJust $ stdMonoms $ generators $ calcGroebnerBasis $ toIdeal ii
