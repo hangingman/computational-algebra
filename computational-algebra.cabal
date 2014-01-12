@@ -22,6 +22,7 @@ source-repository head
 library
   exposed-modules:     Algebra.Algorithms.Groebner
                  ,     Algebra.Algorithms.Groebner.Monomorphic
+                 ,     Algebra.Algorithms.FGLM
                  ,     Algebra.Algorithms.ZeroDim
                  ,     Algebra.Linear
                  ,     Algebra.Ring.Noetherian
@@ -53,9 +54,9 @@ library
                ,       matrix
                ,       vector
                ,       mtl                   == 2.1.*
-               ,       indexed
-               ,       indexed-do-notation
-               ,       indexed-extras
+--               ,       indexed
+--               ,       indexed-do-notation
+--               ,       indexed-extras
                ,       hmatrix
                ,       vector
                ,       primitive
