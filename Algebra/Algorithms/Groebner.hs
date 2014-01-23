@@ -42,13 +42,14 @@ import           Data.Type.Natural       hiding (max, one, promote, zero)
 import           Data.Vector.Sized       (Vector (..), sLength, singleton,
                                           toList)
 import qualified Data.Vector.Sized       as V
-import           Numeric.Algebra         hiding ((>))
-import           Prelude                 hiding (Num (..), recip, (^))
-import           Proof.Equational        hiding (promote)
+import           Numeric.Algebra         hiding ((<), (>))
+import           Prelude                 hiding (Num (..), recip, subtract, (^))
+import           Proof.Equational
 
 -- | Calculate a polynomial quotient and remainder w.r.t. second argument.
 divModPolynomial :: (IsMonomialOrder order, IsPolynomial r n, Field r)
-                  => OrderedPolynomial r order n -> [OrderedPolynomial r order n] -> ([(OrderedPolynomial r order n, OrderedPolynomial r order n)], OrderedPolynomial r order n)
+                 => OrderedPolynomial r order n -> [OrderedPolynomial r order n]
+                 -> ([(OrderedPolynomial r order n, OrderedPolynomial r order n)], OrderedPolynomial r order n)
 divModPolynomial f0 fs = loop f0 zero (zip (nub fs) (repeat zero))
   where
     loop p r dic
@@ -107,7 +108,7 @@ primeTestBuchberger = guardStandardBasis $ \ideal ->
   where
     calc acc = [ q | f <- acc, g <- acc, f /= g
                , let f0 = leadingMonomial f, let g0 = leadingMonomial g
-               , lcmMonomial f0 g0 /= V.zipWithSame (+) f0 g0
+               , lcmMonomial f0 g0 /= f0 * g0
                , let q = sPolynomial f g `modPolynomial` acc, q /= zero
                ]
 
@@ -168,7 +169,7 @@ syzygyBuchbergerWithStrategy :: ( Field r, IsPolynomial r n, IsMonomialOrder ord
                     => strategy -> Ideal (OrderedPolynomial r order n) -> Ideal (OrderedPolynomial r order n)
 syzygyBuchbergerWithStrategy strategy ideal = StandardBasis $ runST $ do
   let gens = zip [1..] $ filter (/= zero) $ generators ideal
-  gs <- newSTRef $ H.fromList [H.Entry (leadingOrderedMonomial g) g | (_, g) <- gens]
+  gs <- newSTRef $ H.fromList [H.Entry (leadingMonomial g) g | (_, g) <- gens]
   b  <- newSTRef $ H.fromList [H.Entry (calcWeight' strategy f g, j) (f, g) | ((_, f), (j, g)) <- combinations gens]
   len <- newSTRef (genericLength gens :: Integer)
   whileM_ (not . H.null <$> readSTRef b) $ do
@@ -182,13 +183,13 @@ syzygyBuchbergerWithStrategy strategy ideal = StandardBasis $ runST $ do
                                   && (all (\k -> H.all ((/=k) . H.payload) rest)
                                                      [(f, h), (g, h), (h, f), (h, g)])
                                   && leadingMonomial h `divs` l) gs0
-    when (l /= V.zipWithSame (+) f0 g0 && not redundant) $ do
+    when (l /= f0 * g0 && not redundant) $ do
       len0 <- readSTRef len
       let qs = (H.toList gs0)
           s = sPolynomial f g `modPolynomial` map H.payload qs
       when (s /= zero) $ do
         b %= H.union (H.fromList [H.Entry (calcWeight' strategy q s, j) (q, s) | H.Entry _ q <- qs | j <- [len0+1..]])
-        gs %= H.insert (H.Entry (leadingOrderedMonomial s) s)
+        gs %= H.insert (H.Entry (leadingMonomial s) s)
         len %= (*2)
   map H.payload . H.toList <$> readSTRef gs
 
@@ -212,23 +213,23 @@ data NormalStrategy = NormalStrategy deriving (Read, Show, Eq, Ord)
 
 instance SelectionStrategy NormalStrategy where
   type Weight NormalStrategy ord = Monomorphic (OrderedMonomial ord)
-  calcWeight _ f g = Monomorphic $
-    OrderedMonomial (lcmMonomial (leadingMonomial f)  (leadingMonomial g))
-                                 `asTypeOf` leadingOrderedMonomial f
+  calcWeight _ f g = Monomorphic $ lcmMonomial (leadingMonomial f)  (leadingMonomial g)
 
 -- | Choose the pair with the least LCM(LT(f), LT(g)) w.r.t. 'Grevlex' order.
 data GrevlexStrategy = GrevlexStrategy deriving (Read, Show, Eq, Ord)
 
 instance SelectionStrategy GrevlexStrategy where
   type Weight GrevlexStrategy ord = Monomorphic (OrderedMonomial Grevlex)
-  calcWeight _ f g = Monomorphic $ OrderedMonomial $ lcmMonomial (leadingMonomial f) (leadingMonomial g)
+  calcWeight _ f g = Monomorphic $ changeMonomialOrderProxy Proxy $
+                     lcmMonomial (leadingMonomial f) (leadingMonomial g)
 
 data GradedStrategy = GradedStrategy deriving (Read, Show, Eq, Ord)
 
 -- | Choose the pair with the least LCM(LT(f), LT(g)) w.r.t. graded current ordering.
 instance SelectionStrategy GradedStrategy where
   type Weight GradedStrategy ord = Monomorphic (OrderedMonomial (Graded ord))
-  calcWeight _ f g = Monomorphic $ OrderedMonomial (lcmMonomial (leadingMonomial f)  (leadingMonomial g))
+  calcWeight _ f g = Monomorphic $ changeMonomialOrderProxy Proxy $
+                     lcmMonomial (leadingMonomial f)  (leadingMonomial g)
 
 -- | Sugar strategy. This chooses the pair with the least phantom homogenized degree and then break the tie with the given strategy (say @s@).
 data SugarStrategy s = SugarStrategy s deriving (Read, Show, Eq, Ord)
@@ -321,8 +322,8 @@ thEliminationIdealWith :: ( IsMonomialOrder ord, Field k, IsPolynomial k m, IsPo
 thEliminationIdealWith ord n ideal =
     case singInstance n of
       SingInstance ->  toIdeal $ [ transformMonomial (V.drop n) f
-                                 | f <- generators $ calcGroebnerBasisWith ord ideal
-                                 , all (all (== 0) . take (sNatToInt n) . toList . snd) $ getTerms f
+                                 | f <- calcGroebnerBasisWith ord ideal
+                                 , all (all (== 0) . take (sNatToInt n) . toList . getMonomial . snd) $ getTerms f
                                  ]
 
 -- | Calculate n-th elimination ideal using the specified n-th elimination type order.
