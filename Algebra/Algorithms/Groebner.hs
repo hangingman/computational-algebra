@@ -39,12 +39,12 @@ import           Data.Maybe
 import           Data.STRef
 import           Data.Type.Monomorphic
 import           Data.Type.Natural       hiding (max, one, promote, zero)
-import           Data.Vector.Sized       (Vector (..), sLength, singleton,
-                                          toList)
-import qualified Data.Vector.Sized       as V
+import qualified Data.Vector             as V
+import           Data.Vector.Sized       (Vector (..), sLength, toList)
+import qualified Data.Vector.Sized       as SV
 import           Numeric.Algebra         hiding ((<), (>))
 import           Prelude                 hiding (Num (..), recip, subtract, (^))
-import           Proof.Equational
+import           Proof.Equational        hiding (promote)
 
 -- | Calculate a polynomial quotient and remainder w.r.t. second argument.
 divModPolynomial :: (IsMonomialOrder order, IsPolynomial r n, Field r)
@@ -84,7 +84,7 @@ infixl 7 `divModPolynomial`
 -- | Apply ideal function to standard basis but doesn't for standard basis.
 guardStandardBasis :: ([r] -> [r]) -> Ideal r -> Ideal r
 guardStandardBasis _ i@(StandardBasis _) = i
-guardStandardBasis f (Ideal i)           = StandardBasis $ f i
+guardStandardBasis f (Ideal i)           = StandardBasis $ V.fromList $ f $ V.toList i
 
 -- | The Naive buchberger's algorithm to calculate Groebner basis for the given ideal.
 simpleBuchberger :: (Field k, IsPolynomial k n, IsMonomialOrder order)
@@ -191,7 +191,7 @@ syzygyBuchbergerWithStrategy strategy ideal = StandardBasis $ runST $ do
         b %= H.union (H.fromList [H.Entry (calcWeight' strategy q s, j) (q, s) | H.Entry _ q <- qs | j <- [len0+1..]])
         gs %= H.insert (H.Entry (leadingMonomial s) s)
         len %= (*2)
-  map H.payload . H.toList <$> readSTRef gs
+  V.fromList . map H.payload . H.toList <$> readSTRef gs
 
 -- | Calculate the weight of given polynomials w.r.t. the given strategy.
 -- Buchberger's algorithm proccesses the pair with the most least weight first.
@@ -254,7 +254,7 @@ minimizeGroebnerBasis (generators -> bs) = StandardBasis $ runST $ do
     unless (any (\g -> leadingMonomial g `divs` leadingMonomial f) xs
          || any (\g -> leadingMonomial g `divs` leadingMonomial f) ys) $
       writeSTRef right (f : ys)
-  readSTRef right
+  V.fromList <$> readSTRef right
 
 -- | Reduce minimum Groebner basis into reduced Groebner basis.
 reduceMinimalGroebnerBasis :: (Field k, IsPolynomial k n, IsMonomialOrder order)
@@ -268,7 +268,7 @@ reduceMinimalGroebnerBasis bs = StandardBasis $ runST $ do
     ys     <- readSTRef right
     let q = f `modPolynomial` (xs ++ ys)
     if q == zero then writeSTRef right ys else writeSTRef right (q : ys)
-  readSTRef right
+  V.fromList <$> readSTRef right
 
 monoize :: (Field k, IsPolynomial k n, IsMonomialOrder order)
            => OrderedPolynomial k order n -> OrderedPolynomial k order n
@@ -321,8 +321,8 @@ thEliminationIdealWith :: ( IsMonomialOrder ord, Field k, IsPolynomial k m, IsPo
                    -> Ideal (OrderedPolynomial k ord (m :-: n))
 thEliminationIdealWith ord n ideal =
     case singInstance n of
-      SingInstance ->  toIdeal $ [ transformMonomial (V.drop n) f
-                                 | f <- calcGroebnerBasisWith ord ideal
+      SingInstance ->  toIdeal $ [ transformMonomial (SV.drop n) f
+                                 | f <- generators $ calcGroebnerBasisWith ord ideal
                                  , all (all (== 0) . take (sNatToInt n) . toList . getMonomial . snd) $ getTerms f
                                  ]
 
@@ -337,9 +337,9 @@ unsafeThEliminationIdealWith :: ( IsMonomialOrder ord, Field k, IsPolynomial k m
                              -> Ideal (OrderedPolynomial k ord (m :-: n))
 unsafeThEliminationIdealWith ord n ideal =
     case singInstance n of
-      SingInstance ->  toIdeal $ [ transformMonomial (V.drop n) f
+      SingInstance ->  toIdeal $ [ transformMonomial (SV.drop n) f
                                  | f <- generators $ calcGroebnerBasisWith ord ideal
-                                 , all (all (== 0) . take (sNatToInt n) . toList . snd) $ getTerms f
+                                 , all (all (== 0) . take (sNatToInt n) . toList . getMonomial . snd) $ getTerms f
                                  ]
 
 -- | An intersection ideal of given ideals (using 'WeightedEliminationOrder').
@@ -354,7 +354,7 @@ intersection idsv =
     Monomorphic sk ->
       case singInstance (sk %+ sn) of
         SingInstance ->
-          let ts  = genVars (sk %+ sn)
+          let ts  = take (length idsv) $ genVars (sk %+ sn)
               tis = zipWith (\ideal t -> mapIdeal ((t *) . shiftR sk) ideal) idsv ts
               j = foldr appendIdeal (principalIdeal (one - foldr (+) zero ts)) tis
           in case plusMinusEqR sn sk of
@@ -368,7 +368,7 @@ quotByPrincipalIdeal :: (Field k, IsPolynomial k n, IsMonomialOrder ord)
                      -> Ideal (OrderedPolynomial k ord n)
 quotByPrincipalIdeal i g =
     case intersection [i, principalIdeal g] of
-      Ideal gs -> Ideal $ map (snd . head . (`divPolynomial` [g])) gs
+      Ideal gs -> Ideal $ V.map (snd . head . (`divPolynomial` [g])) gs
 
 -- | Ideal quotient by the given ideal.
 quotIdeal :: forall k ord n. (IsPolynomial k n, Field k, IsMonomialOrder ord)

@@ -69,7 +69,7 @@ spec = parallel $ do
           SZ -> error "impossible"
           SS _ ->
             forAll (zeroDimOf sdim) $ \(ZeroDimIdeal ideal) ->
-            stdReduced (fst $ fglm ideal) == stdReduced (calcGroebnerBasisWith Lex ideal)
+            stdReduced (fst $ fglm ideal) == stdReduced (generators $ calcGroebnerBasisWith Lex ideal)
     prop "returns lex base in descending order" $
       checkForArity [2..4] $ \sdim ->
       case sdim of

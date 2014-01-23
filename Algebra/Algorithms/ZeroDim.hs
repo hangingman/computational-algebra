@@ -147,7 +147,7 @@ solveViaCompanion :: forall r ord n.
                   -> Ideal (OrderedPolynomial r ord n)
                   -> [SV.Vector (Complex Double) n]
 solveViaCompanion err ideal =
-  if calcGroebnerBasis ideal == [one]
+  if generators (calcGroebnerBasis ideal) == [one]
   then []
   else
   let vs = map (nub . LA.toList . LA.eigenvalues . LA.fromLists . matToLists . fmap toComplex . flip subspMatrix ideal) $
@@ -180,7 +180,7 @@ reduction :: (IsPolynomial r n, IsMonomialOrder ord, Field r)
              => Ordinal n -> OrderedPolynomial r ord n -> OrderedPolynomial r ord n
 reduction on f = {-# SCC "reduction" #-}
   let df = {-# SCC "differentiate" #-} diff on f
-  in snd $ head $ f `divPolynomial` calcGroebnerBasis (toIdeal [f, df])
+  in snd $ head $ f `divPolynomial` generators (calcGroebnerBasis (toIdeal [f, df]))
 
 -- | Calculate the monic generator of k[X_0, ..., X_n] `intersect` k[X_i].
 univPoly :: forall r ord n. (Ord r, Normed r, Field r, IsPolynomial r n, IsMonomialOrder ord)

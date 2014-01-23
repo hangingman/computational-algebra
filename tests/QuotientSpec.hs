@@ -27,7 +27,7 @@ prop_passesSTest sdim =
     SingInstance ->
       forAll (elements [3..15]) $ \count ->
       forAll (vectorOf count (polyOfDim sdim)) $ \ideal ->
-      let gs = calcGroebnerBasis $ toIdeal ideal
+      let gs = generators $ calcGroebnerBasis $ toIdeal ideal
       in all ((== 0) . (`modPolynomial` gs)) [sPolynomial f g | f <- gs, g <- gs, f /= g]
 
 prop_groebnerDivsOrig :: SNat n -> Property
@@ -37,7 +37,7 @@ prop_groebnerDivsOrig sdim =
       forAll (elements [3..15]) $ \count ->
       forAll (vectorOf count (polyOfDim sdim)) $ \ideal ->
       let gs = calcGroebnerBasis $ toIdeal ideal
-      in all ((== 0) . (`modPolynomial` gs)) ideal
+      in all ((== 0) . (`modPolynomial` generators gs)) ideal
 
 prop_divCorrect :: SNat n -> Property
 prop_divCorrect sdim =

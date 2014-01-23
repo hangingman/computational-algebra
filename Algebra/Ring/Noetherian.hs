@@ -7,8 +7,10 @@ module Algebra.Ring.Noetherian ( NoetherianRing, Ideal(..), addToIdeal, toIdeal,
 import           Control.DeepSeq
 import qualified Data.Complex            as C
 import           Data.Function
+import           Data.Monoid
 import           Data.Ord
 import           Data.Ratio
+import qualified Data.Vector             as V
 import           Numeric.Algebra
 import qualified Numeric.Algebra.Complex as NA
 import           Prelude                 hiding (negate, subtract, (*), (+),
@@ -86,12 +88,12 @@ instance Integral n => LeftModule (Ratio n) (Ratio n) where
 instance Integral n => RightModule (Ratio n) (Ratio n) where
     (*.) = (*)
 
-data Ideal r = Ideal [r]
-             | StandardBasis [r]
+data Ideal r = Ideal (V.Vector r)
+             | StandardBasis (V.Vector r)
 
 generators :: Ideal r -> [r]
-generators (Ideal gs) = gs
-generators (StandardBasis gs) = gs
+generators (Ideal gs) = V.toList gs
+generators (StandardBasis gs) =V.toList  gs
 
 instance Eq r => Eq (Ideal r) where
   (==) = (==) `on` generators
@@ -105,24 +107,27 @@ instance Show r => Show (Ideal r) where
 addToIdeal :: (Monoidal r, Eq r) => r -> Ideal r -> Ideal r
 addToIdeal i is
     | i == zero = is
-    | otherwise = Ideal (i : generators is)
+    | otherwise = Ideal (V.fromList $ i : generators is)
 
 infixr `addToIdeal`
 
 toIdeal :: (Eq r, NoetherianRing r) => [r] -> Ideal r
-toIdeal = Ideal
+toIdeal = Ideal . V.fromList
+
+generators' (Ideal gs) = gs
+generators' (StandardBasis gs) = gs
 
 appendIdeal :: Ideal r -> Ideal r -> Ideal r
-appendIdeal is js = Ideal $ generators is ++ generators js
+appendIdeal is js = Ideal $ generators' is <> generators' js
 
 filterIdeal :: (Eq r, NoetherianRing r) => (r -> Bool) -> Ideal r -> Ideal r
-filterIdeal p is = Ideal $ filter p $ generators is
+filterIdeal p is = Ideal $ V.filter p $ generators' is
 
 principalIdeal :: r -> Ideal r
-principalIdeal = StandardBasis . (:[])
+principalIdeal = StandardBasis . V.singleton
 
 mapIdeal :: (r -> r') -> Ideal r -> Ideal r'
-mapIdeal fun xs = Ideal $ map fun $ generators xs
+mapIdeal fun xs = Ideal $ V.map fun $ generators' xs
 
 instance NFData r => NFData (Ideal r) where
   rnf (Ideal is)         = rnf is

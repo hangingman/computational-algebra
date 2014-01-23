@@ -96,6 +96,23 @@ encodePolynomial :: (Monomorphicable (Poly.Polynomial r))
                  => Polynomial r -> Monomorphic (Poly.Polynomial r)
 encodePolynomial = promote . toPolynomialSetting
 
+uniformlyPromote :: (Eq r, NoetherianRing r, Poly.IsMonomialOrder ord)
+                 => [Polynomial r] -> Monomorphic (Ideal :.: Poly.OrderedPolynomial r ord)
+uniformlyPromote ps  = uniformlyPromoteWithDim (length vars) ps
+  where
+    vars = nub $ sort $ concatMap buildVarsList ps
+
+uniformlyPromoteWithDim :: (Eq r, NoetherianRing r)
+                        => Poly.IsMonomialOrder ord
+                 => Int -> [Polynomial r] -> Monomorphic (Ideal :.: Poly.OrderedPolynomial r ord)
+uniformlyPromoteWithDim d ps  =
+  case promote d of
+    Monomorphic dim ->
+      case singInstance dim of
+        SingInstance -> Monomorphic $ Comp $ toIdeal $ map (Poly.polynomial . M.mapKeys (Poly.OrderedMonomial . Poly.fromList dim . encodeMonomList vars) . unPolynomial) ps
+  where
+    vars = nub $ sort $ concatMap buildVarsList ps
+
 toPolynomialSetting :: Polynomial r -> PolynomialSetting r
 toPolynomialSetting p =
     PolySetting { polyn = p
@@ -130,29 +147,6 @@ instance (Eq r, NoetherianRing r, Poly.IsMonomialOrder ord)
                   }
     where
       toMonom = M.fromList . zip (Variable 'X' Nothing : [Variable 'X' (Just i) | i <- [1..]])
-
-uniformlyPromoteWithDim :: (Eq r, NoetherianRing r)
-                        => Poly.IsMonomialOrder ord
-                 => Int -> [Polynomial r] -> Monomorphic (Ideal :.: Poly.OrderedPolynomial r ord)
-uniformlyPromoteWithDim d ps  =
-  case promote d of
-    Monomorphic dim ->
-      case singInstance dim of
-        SingInstance -> Monomorphic $ Comp $ toIdeal $ map (Poly.polynomial . M.mapKeys (Poly.OrderedMonomial . Poly.fromList dim . encodeMonomList vars) . unPolynomial) ps
-  where
-    vars = nub $ sort $ concatMap buildVarsList ps
-
-uniformlyPromote :: (Eq r, NoetherianRing r, Poly.IsMonomialOrder ord)
-                 => [Polynomial r] -> Monomorphic (Ideal :.: Poly.OrderedPolynomial r ord)
-uniformlyPromote ps  = uniformlyPromoteWithDim (length vars) ps
-  where
-    vars = nub $ sort $ concatMap buildVarsList ps
-
-instance (NoetherianRing r, Eq r, Poly.IsMonomialOrder ord)
-    => Monomorphicable (Ideal :.: Poly.OrderedPolynomial r ord) where
-  type MonomorphicRep (Ideal :.: Poly.OrderedPolynomial r ord) = [Polynomial r]
-  promote = uniformlyPromote
-  demote (Monomorphic (Comp (Ideal v))) = map (polyn . demote . Monomorphic) $ V.toList v
 
 promoteList :: (Eq r, NoetherianRing r, Poly.IsMonomialOrder ord)
             => [Polynomial r] -> Monomorphic ([] :.: Poly.OrderedPolynomial r ord)

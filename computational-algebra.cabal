@@ -55,7 +55,7 @@ library
                  ,      vector                  == 0.10.*
                  ,      sparse                  == 0.7.*
     exposed-modules: Algebra.Algorithms.Groebner
-                     Algebra.Algorithms.Groebner.Monomorphic
+                     -- Algebra.Algorithms.Groebner.Monomorphic -- ^ currently disabled
                      Algebra.Algorithms.ZeroDim
                      Algebra.Ring.Noetherian
                      Algebra.Ring.Polynomial

@@ -38,7 +38,7 @@ spec = do
       forAll (idealOfDim ari) $ \i ->
       forAll (vectorOf (length $ generators i) $ polyOfDim ari) $ \fs ->
       let f = sum $ zipWith (*) fs (generators i)
-          gs = calcGroebnerBasis i
+          gs = generators $ calcGroebnerBasis i
       in f `modPolynomial` gs == 0
     it "produces minimal basis" $ do
       checkForArity [2..3] prop_isMinimal
@@ -52,7 +52,7 @@ spec = do
       checkForArity [2..3] prop_intersection
     it "can solve test-cases correctly" $ do
       forM_ ics_binary $ \(IC i j ans) ->
-        intersection (toIdeal i :- toIdeal j :- Nil) `shouldBe` toIdeal ans
+        intersection [toIdeal i, toIdeal j] `shouldBe` toIdeal ans
 
 prop_intersection :: SingRep n => SNat n -> Property
 prop_intersection sdim =
@@ -60,33 +60,33 @@ prop_intersection sdim =
   forAll (idealOfDim sdim) $ \jdeal ->
   forAll (polyOfDim sdim) $ \f ->
   (f `isIdealMember` ideal && f `isIdealMember` jdeal)
-  == f `isIdealMember` (intersection $ ideal :- jdeal :- Nil)
+  == f `isIdealMember` (intersection [ideal, jdeal])
 
 prop_isMinimal :: SingRep n => SNat n -> Property
 prop_isMinimal sdim =
   forAll (idealOfDim sdim) $ \ideal ->
-  let gs = calcGroebnerBasis ideal
+  let gs = generators $ calcGroebnerBasis ideal
   in all ((== 1) . leadingCoeff) gs &&
      all (\f -> all (\g -> not $ leadingMonomial g `divs` leadingMonomial f) (delete f gs)) gs
 
 prop_isReduced :: SingRep n => SNat n -> Property
 prop_isReduced sdim =
   forAll (idealOfDim sdim) $ \ideal ->
-  let gs = calcGroebnerBasis ideal
+  let gs = generators $ calcGroebnerBasis ideal
   in all ((== 1) . leadingCoeff) gs &&
      all (\f -> all (\g -> all (\(_, m) -> not $ leadingMonomial g `divs` m) $ getTerms f) (delete f gs)) gs
 
 prop_passesSTest :: SingRep n => SNat n -> Property
 prop_passesSTest sdim =
   forAll (sized $ \size -> vectorOf size (polyOfDim sdim)) $ \ideal ->
-  let gs = calcGroebnerBasis $ toIdeal ideal
+  let gs = generators $ calcGroebnerBasis $ toIdeal ideal
   in all ((== 0) . (`modPolynomial` gs)) [sPolynomial f g | f <- gs, g <- gs, f /= g]
 
 prop_groebnerDivsOrig :: SingRep n => SNat n -> Property
 prop_groebnerDivsOrig sdim =
   forAll (elements [3..15]) $ \count ->
   forAll (vectorOf count (polyOfDim sdim)) $ \ideal ->
-  let gs = calcGroebnerBasis $ toIdeal ideal
+  let gs = generators $ calcGroebnerBasis $ toIdeal ideal
   in all ((== 0) . (`modPolynomial` gs)) ideal
 
 prop_divCorrect :: SingRep n => SNat n -> Property
