@@ -35,3 +35,4 @@ script:
 matrix:
   allow_failures:
     - env: GHCVER=head
+    - env: GHCVER=7.6.3

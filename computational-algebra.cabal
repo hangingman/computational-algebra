@@ -69,6 +69,7 @@ library
                      Algebra.Algorithms.Faugere5 Algebra.Algorithms.Groebner
                      Algebra.Algorithms.ZeroDim Algebra.Field.Galois
                      Algebra.Ring.Ideal Algebra.Ring.Polynomial
+                     Algebra.Ring.Polynomial.Named
                      Algebra.Ring.Polynomial.Monomorphic
                      Algebra.Repa Algebra.Ring.Polynomial.Quotient
                      Algebra.Ring.Polynomial.Parser Algebra.Field.Finite
@@ -80,7 +81,7 @@ library
     buildable: True
     other-modules: Algebra.Algorithms.FGLM Algebra.Field.Galois.Internal Algebra.Field.Galois.Conway
     ghc-options: -fwarn-name-shadowing -Odph -with-rtsopts="-qa"
-    extensions: CPP
+    extensions: CPP, DataKinds, PolyKinds, GADTs, TypeFamilies, KindSignatures, TypeOperators
     if impl(ghc >= 7.8)
        extensions: AllowAmbiguousTypes
  
