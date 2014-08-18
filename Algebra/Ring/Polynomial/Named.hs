@@ -11,22 +11,27 @@ import Control.Lens                (makeWrapped)
 import Data.Type.Natural           (Nat (..), SNat, Sing (SS, SZ))
 import Numeric.Semiring.Integral   (IntegralSemiring)
 import Prelude (Num)
-import Data.Type.Ordinal (Ordinal)
-import Data.Vector.Sized (Vector)
 import Data.Singletons.Prelude
 import Data.Vector.Sized ((%!!))
 import GHC.TypeLits hiding (Nat)
 import qualified GHC.TypeLits as TL
 import Data.Singletons.TH (genDefunSymbols)
 import Data.Singletons.Decide
-import Data.Singletons.TypeLits (withKnownNat)
 import Unsafe.Coerce (unsafeCoerce)
-import Data.Singletons.Prelude.Maybe
-import Data.Proxy (Proxy)
 import GHC.Exts (Constraint)
 import qualified Data.Vector.Sized as V
-import Control.Lens ((&))
 import qualified Prelude as P
+import Data.Singletons.TH (singletons)
+import Data.Type.Natural (natToInt)
+import Data.Type.Natural ((:+), (%:+), plusSR)
+import Proof.Equational ((:=:))
+import Proof.Equational (start)
+import Proof.Equational (admitted)
+import Proof.Equational ((===), (=~=))
+import Proof.Equational (cong')
+import Proof.Equational (because)
+import Data.Singletons.Types (Proxy(..))
+import Proof.Equational (cong)
 
 type family Len (vs :: [k]) :: Nat where
   Len '[] = Z
@@ -127,12 +132,12 @@ genVarsFor vs = map QPolynomial $ genVars $ sLen vs
 
 type family FindIndex xs x where
   FindIndex '[]       x = Nothing
-  FindIndex (x ': xs) x = Just 0
+  FindIndex (x ': xs) x = Just Z
   FindIndex (y ': xs) x = RecFindInd (FindIndex xs x)
 
-type family RecFindInd (m :: Maybe TL.Nat) :: Maybe TL.Nat
+type family RecFindInd (m :: Maybe Nat) :: Maybe Nat
 type instance RecFindInd Nothing  = Nothing
-type instance RecFindInd (Just n) = Just (n + 1)
+type instance RecFindInd (Just n) = Just (S n)
 
 genDefunSymbols [''FindIndex, ''RecFindInd]
 
@@ -148,12 +153,12 @@ sFindIndex :: SDecide ('KProxy :: KProxy k)
 sFindIndex SNil         _ = SNothing
 sFindIndex (SCons x xs) y =
   case x %~ y of
-    Proved Refl -> SJust (sing :: Sing 0)
+    Proved Refl -> SJust SZ
     Disproved _ -> unsafeCoerce $  sRecFindInd (sFindIndex xs y)
 
 sRecFindInd :: SMaybe n -> SMaybe (RecFindInd n)
 sRecFindInd SNothing  = SNothing
-sRecFindInd (SJust (n :: Sing n)) = SJust (unsafeCoerce n :: Sing (n + 1))
+sRecFindInd (SJust n) = SJust (SS n)
 
 type family BelongsTo xs x :: Constraint where
    BelongsTo (x ': xs) x = ()
@@ -163,12 +168,79 @@ type family AllC (p :: k -> Constraint) (xs :: [k]) :: Constraint where
   AllC p '[] = ()
   AllC p (x ': xs) = (p x, AllC p xs)
 
-naturalInjection :: forall pxy vs vs' r ord.
+unsafeInjection :: forall pxy vs vs' r ord.
                     (SingI (Len vs'), SingI (Len vs), SingI (Permute vs vs'),
-                     AllC (BelongsTo vs') vs, IsOrder ord, DecidableZero r,
-                     Ring r)
+                     IsOrder ord, DecidableZero r, Ring r)
                  => pxy vs' -> QPolynomial r ord vs -> QPolynomial r ord vs'
-naturalInjection _ (QPolynomial f) =
+unsafeInjection _ (QPolynomial f) =
   let ids = fromSing (sing :: SList (Permute vs vs'))
-      build m = V.unsafeFromList' $ map (maybe 0 ((m %!!) . P.fromInteger)) ids
+      build m = V.unsafeFromList' $ map (maybe 0 ((m %!!) . P.fromInteger . natToInt)) ids
   in QPolynomial $ transformMonomial build f
+
+injection :: forall pxy vs vs' r ord.
+                    (SingI (Len vs'), SingI (Len vs), SingI (Permute vs vs'),
+                     All (FlipSym0 @@ ElemSym0 @@ vs') vs ~ True,
+                     IsOrder ord, DecidableZero r, Ring r)
+                 => pxy vs' -> QPolynomial r ord vs -> QPolynomial r ord vs'
+injection = unsafeInjection
+
+singletons [d|
+  partition :: (a -> Bool) -> [a] -> ([a], [a])
+  partition _ [] = ([], [])
+  partition p (x : xs) = case partition p xs of
+              (ys,ns) -> if p x then (x:ys, ns) else (ys, x:ns)
+ |]
+
+lenDistr :: SList xs -> SList ys -> Len (xs :++ ys) :=: Len xs :+ Len ys
+lenDistr SNil _ = Refl
+lenDistr (SCons x xs) ys =
+  start (sLen $ SCons x xs %:++ ys)
+    =~= sLen (SCons x (xs %:++ ys))
+    =~= SS (sLen (xs %:++ ys))
+    === SS (sLen xs %:+ sLen ys)       `because` cong' SS (lenDistr xs ys)
+    =~= SS (sLen xs) %:+ sLen ys
+    =~= sLen (SCons x xs) %:+ sLen ys
+
+partitionLength :: (Partition p xs ~ '(ls, rs))
+                => Sing p -> SList xs -> Len xs :=: Len ls :+ Len rs
+partitionLength _ SNil = Refl
+partitionLength p (SCons x xs) =
+  case sPartition p xs of
+    STuple2 ls rs -> case applySing p x of
+      STrue -> start (sLen (SCons x xs))
+                  =~= SS (sLen xs)
+                  === SS (sLen ls %:+ sLen rs)
+                        `because` cong' SS (partitionLength p xs)
+                  =~= SS (sLen ls) %:+ sLen rs
+                  =~= sLen (SCons x ls) %:+ sLen rs
+      SFalse -> start (sLen (SCons x xs))
+                  =~= SS (sLen xs)
+                  === SS (sLen ls %:+ sLen rs)
+                        `because` cong' SS (partitionLength p xs)
+                  === sLen ls %:+ SS (sLen rs)
+                        `because` plusSR (sLen ls) (sLen rs)
+                  =~= sLen ls %:+ sLen (SCons x rs)
+
+belongsTo :: forall xs. SEq ('KProxy :: KProxy k) => SList (xs :: [k]) -> Sing ((FlipSym0 @@ ElemSym0) @@ xs)
+belongsTo zs = singFun1 (Proxy :: Proxy (FlipSym0 @@ ElemSym0 @@ xs)) (flip sElem zs)
+
+eliminate :: forall r ord vs. (IsMonomialOrder ord, DecidableZero r, Eq r, Field r, SingI vs)
+          => [String] -> Ideal (QPolynomial r ord vs) -> Ideal (QPolynomial r ord vs)
+eliminate dels0 ideal =
+  let vs = sing :: SList vs
+  in case toSing dels0 :: SomeSing ('KProxy :: KProxy [Symbol])of
+    SomeSing (dels :: SList targs) ->
+      case sPartition (belongsTo dels) vs of
+        STuple2 (ds :: SList ds) (ns :: SList ns) ->
+          case lenDistr ds ns of
+            Refl ->
+             case partitionLength (belongsTo dels) vs of
+               Refl ->
+                 let reorded = ds %:++ ns in
+                 withSingI (sLen ds) $ withSingI (sLen ns) $ withSingI (sLen ds %:+ sLen ns ) $
+                 withSingI (sMap (singFun1 (Proxy :: Proxy (FindIndexSym1 vs)) $ sFindIndex vs) reorded) $ 
+                 withSingI (sMap (singFun1 (Proxy :: Proxy (FindIndexSym1 (ds :++ ns))) $ sFindIndex reorded) vs) $ 
+                 toIdeal $ map (unsafeInjection vs . withVars reorded . changeOrderProxy Proxy) $
+                 filter (\f -> all (V.all (== 0) . V.takeAtMost (sLen ds) . getMonomial) $ monomials f) $ 
+                 calcGroebnerBasisWith (weightedEliminationOrder (sLen ds)) $
+                 mapIdeal (runQPolynomial . unsafeInjection (ds %:++ ns)) ideal
