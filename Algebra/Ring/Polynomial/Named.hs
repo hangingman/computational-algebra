@@ -5,33 +5,25 @@
 {-# LANGUAGE TemplateHaskell, TypeFamilies, TypeOperators             #-}
 {-# LANGUAGE UndecidableInstances                                     #-}
 module Algebra.Ring.Polynomial.Named where
-import Algebra.Prelude
-import Algebra.Algorithms.Groebner
-import Control.Lens                (makeWrapped)
-import Data.Type.Natural           (Nat (..), SNat, Sing (SS, SZ))
-import Numeric.Semiring.Integral   (IntegralSemiring)
-import Prelude (Num)
-import Data.Singletons.Prelude
-import Data.Vector.Sized ((%!!))
-import GHC.TypeLits hiding (Nat)
-import qualified GHC.TypeLits as TL
-import Data.Singletons.TH (genDefunSymbols)
-import Data.Singletons.Decide
-import Unsafe.Coerce (unsafeCoerce)
-import GHC.Exts (Constraint)
-import qualified Data.Vector.Sized as V
-import qualified Prelude as P
-import Data.Singletons.TH (singletons)
-import Data.Type.Natural (natToInt)
-import Data.Type.Natural ((:+), (%:+), plusSR)
-import Proof.Equational ((:=:))
-import Proof.Equational (start)
-import Proof.Equational (admitted)
-import Proof.Equational ((===), (=~=))
-import Proof.Equational (cong')
-import Proof.Equational (because)
-import Data.Singletons.Types (Proxy(..))
-import Proof.Equational (cong)
+import           Algebra.Algorithms.Groebner
+import           Algebra.Prelude
+import           Control.Lens                (makeWrapped)
+import           Data.Singletons.Decide
+import           Data.Singletons.Prelude
+import           Data.Singletons.TH          (genDefunSymbols, singletons)
+import           Data.Singletons.Types       (Proxy (..))
+import           Data.Type.Natural           ((:+), Nat (..), SNat)
+import           Data.Type.Natural           (Sing (SS, SZ), natToInt, plusSR)
+import           Data.Type.Natural           ((%:+))
+import           Data.Vector.Sized           ((%!!))
+import qualified Data.Vector.Sized           as V
+import           GHC.Exts                    (Constraint)
+import           Numeric.Semiring.Integral   (IntegralSemiring)
+import           Prelude                     (Num)
+import qualified Prelude                     as P
+import           Proof.Equational            ((:=:), because, cong', start)
+import           Proof.Equational            ((===), (=~=))
+import           Unsafe.Coerce               (unsafeCoerce)
 
 type family Len (vs :: [k]) :: Nat where
   Len '[] = Z
@@ -116,7 +108,7 @@ instance (IsOrder ord, DecidableZero r, SingI (Len vs), SingI vs, Ring r, Show r
 
 deriving instance (IsMonomialOrder order, Ring r, DecidableZero r, SingI (Len vs), Num r)
                => Num (QPolynomial r order vs)
-  
+
 buildVars :: forall proxy (vs :: [Symbol]). SingI vs => proxy vs -> [String]
 buildVars _ = fromSing (sing :: SList vs)
 {-# INLINE buildVars #-}
@@ -238,9 +230,9 @@ eliminate dels0 ideal =
                Refl ->
                  let reorded = ds %:++ ns in
                  withSingI (sLen ds) $ withSingI (sLen ns) $ withSingI (sLen ds %:+ sLen ns ) $
-                 withSingI (sMap (singFun1 (Proxy :: Proxy (FindIndexSym1 vs)) $ sFindIndex vs) reorded) $ 
-                 withSingI (sMap (singFun1 (Proxy :: Proxy (FindIndexSym1 (ds :++ ns))) $ sFindIndex reorded) vs) $ 
+                 withSingI (sMap (singFun1 (Proxy :: Proxy (FindIndexSym1 vs)) $ sFindIndex vs) reorded) $
+                 withSingI (sMap (singFun1 (Proxy :: Proxy (FindIndexSym1 (ds :++ ns))) $ sFindIndex reorded) vs) $
                  toIdeal $ map (unsafeInjection vs . withVars reorded . changeOrderProxy Proxy) $
-                 filter (\f -> all (V.all (== 0) . V.takeAtMost (sLen ds) . getMonomial) $ monomials f) $ 
+                 filter (\f -> all (V.all (== 0) . V.takeAtMost (sLen ds) . getMonomial) $ monomials f) $
                  calcGroebnerBasisWith (weightedEliminationOrder (sLen ds)) $
                  mapIdeal (runQPolynomial . unsafeInjection (ds %:++ ns)) ideal
